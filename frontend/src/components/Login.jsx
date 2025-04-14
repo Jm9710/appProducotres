@@ -1,15 +1,57 @@
-import React from "react";
+import React, { useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [user, setUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(""); // Corregí "eror" a "error"
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e) => {
+  const apiUrl = "http://127.0.0.1:3001/";
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate("/home");
+  
+    try {
+      const response = await fetch(`${apiUrl}api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ user, password }),
+      });
+  
+      const data = await response.json();
+  
+      if (response.ok) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", user);
+        localStorage.setItem("nombre", data.nombre);
+  
+        if (data.tipo_usuario === "Oficina" || data.tipo_usuario === "Admin") {
+          navigate("/home");
+        }
+        if (data.tipo_usuario === "Productor") {
+          navigate("/home-cliente");
+        }
+      } else {
+        if (response.status === 404) {
+          setError("Usuario no encontrado");
+        } else if (response.status === 401) {
+          setError("Contraseña incorrecta");
+        } else {
+          setError(data.error || "Error en el inicio de sesión");
+        }
+      }
+    } catch (err) {
+      setError("Error de conexión con el servidor");
+    }
   };
-
+  
   return (
     <div
       className="d-flex justify-content-center align-items-center"
@@ -32,7 +74,7 @@ const Login = () => {
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
-          opacity: 0.5, // Aplicar opacidad a la imagen de fondo
+          opacity: 0.5,
           zIndex: -1,
         }}
       ></div>
@@ -46,28 +88,44 @@ const Login = () => {
           <img
             src="./images/logosdc.png"
             alt="Logo"
-            style={{ maxWidth: "150px", width: "100%" }} // Ajusta el tamaño según necesites
+            style={{ maxWidth: "150px", width: "100%" }}
           />
-        </div>        <form onSubmit={handleSubmit}>
+        </div>
+        <form onSubmit={handleSubmit}>
           <div className="form-group mb-3">
-            <label htmlFor="email">Usuario</label>
+            <label htmlFor="nom_us">Usuario</label>
             <input
-              type="email"
+              type="text"
               className="form-control"
-              id="email"
-              aria-describedby="emailHelp"
+              id="nom_us"
               placeholder="Escribe tu usuario aquí"
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
             />
           </div>
           <div className="form-group mb-3">
-            <label htmlFor="password">Contraseña</label>
-            <input
-              type="password"
-              className="form-control"
-              id="password"
-              placeholder="Escribe tu contraseña aquí"
-            />
+            <label htmlFor="pass_us">Contraseña</label>
+            <div className="input-group">
+              <input
+                type={showPassword ? "text" : "password"}
+                className="form-control"
+                id="pass_us"
+                placeholder="Escribe tu contraseña aquí"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+              >
+                <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
+              </button>
+            </div>
           </div>
+          {error && <p className="text-danger">{error}</p>}{" "}
+          {/* Muestra errores */}
           <button type="submit" className="btn btn-primary w-100">
             Iniciar sesión
           </button>

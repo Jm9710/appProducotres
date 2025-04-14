@@ -1,0 +1,2 @@
+[console_scripts]
+eralchemy2 = eralchemy2.main:cli

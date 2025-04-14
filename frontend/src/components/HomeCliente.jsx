@@ -1,7 +1,27 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 
+
+
+
 const Home = () => {
+  const [nomUsuario, setNomUsuario] = React.useState("");
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    const nombre = localStorage.getItem("nombre");
+    if (nombre){
+      setNomUsuario(nombre);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("nombre");
+    navigate("/");
+  }
+
   return (
     <div className="container-fluid p-0 min-vh-100 d-flex flex-column">
       {/* Barra superior */}
@@ -15,8 +35,8 @@ const Home = () => {
           />
           <h5 className="m-0">SDC Taipas</h5>
         </div>
-        <h5 className="m-0 text-center flex-grow-1">Bienvenido &lt;NomUsuario&gt;</h5>
-        <button className="btn btn-outline-secondary">Cerrar Sesión</button>
+        <h5 className="m-0 text-center flex-grow-1">Bienvenido {nomUsuario}</h5>
+        <button className="btn btn-outline-secondary" onClick={handleLogout}>Cerrar Sesión</button>
       </header>
 
 
