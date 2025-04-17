@@ -5,6 +5,38 @@ from flask_jwt_extended import create_access_token, jwt_required
 from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
 from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3
 from config import Config
+import xml.etree.ElementTree as ET
+
+
+def kml_to_geojson(kml_data):
+    """Convert KML data to GeoJSON format."""
+    kml_tree = ET.ElementTree(ET.fromstring(kml_data))
+    root = kml_tree.getroot()
+
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+
+    geojson_features = []
+    for placemark in root.findall('.//kml:Placemark', ns):
+        geometry = placemark.find('.//kml:Polygon//kml:coordinates', ns)
+        if geometry is not None:
+            coordinates = geometry.text.strip().split(' ')
+            coords = [[float(coord.split(',')[0]), float(coord.split(',')[1])] for coord in coordinates]
+            feature = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': [coords]
+                },
+                'properties': {
+                    'name': placemark.find('.//kml:name', ns).text if placemark.find('.//kml:name', ns) is not None else 'Unnamed'
+                }
+            }
+            geojson_features.append(feature)
+
+    return {
+        'type': 'FeatureCollection',
+        'features': geojson_features
+    }
 
 
 # Crear un Blueprint para las rutas
@@ -353,6 +385,114 @@ def eliminar_archivo():
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Error interno del servidor: {str(e)}"}), 500
+        
 
+
+@routes.route('/api/subir_kml', methods=['POST'])
+def subir_kml():
+    print("Llegó una solicitud de subida de archivo KML.")  # Verifica que la solicitud llegó
+
+    # Verificar si los campos necesarios están presentes en la solicitud
+    if 'archivo' not in request.files:
+        print("No se ha subido ningún archivo")
+        return jsonify({"msg": "No se ha subido ningún archivo"}), 400
+    
+    archivo = request.files['archivo']
+    if 'productorId' not in request.form or not request.form['productorId']:
+        print("No se ha especificado el productor ID")
+        return jsonify({"msg": "No se ha especificado el productor ID"}), 400
+
+    # Usar el productor ID como el cod_productor
+    cod_productor = request.form['productorId']
+    print(f"Productor código recibido: {cod_productor}")  # Verifica que el productor_id esté siendo recibido correctamente
+
+    # Verificar si el archivo tiene un nombre
+    if archivo.filename == '':
+        print("No se ha seleccionado ningún archivo")
+        return jsonify({"msg": "No se ha seleccionado ningún archivo"}), 400
+
+    # Generar un nombre seguro para el archivo
+    filename = secure_filename(archivo.filename)
+
+    # Validar que el archivo sea un KML
+    if not filename.lower().endswith('.kml'):
+        print("El archivo subido no es un archivo KML")
+        return jsonify({"msg": "El archivo subido no es un archivo KML"}), 400
+
+    # Obtener el productor usando el cod_productor
+    productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
+    if not productor:
+        print("Productor no encontrado")
+        return jsonify({"msg": "Productor no encontrado"}), 404
+
+    # Crear el prefijo para la "carpeta" en S3 usando el cod_productor
+    ruta_s3 = f"{cod_productor}/kml/{filename}"
+    print(f"Ruta de S3 generada: {ruta_s3}")  # Verifica la ruta generada
+
+    # Leer el contenido del archivo para convertirlo a GeoJSON
+    kml_data = archivo.read()
+    geojson_data = kml_to_geojson(kml_data)
+    print("Conversión de KML a GeoJSON completada.")  # Verifica la conversión
+
+    # Subir el archivo a S3
+    archivo.seek(0)  # Restablecer el puntero del archivo antes de subirlo
+    mensaje = subir_archivo_a_s3(archivo, ruta_s3)
+
+    # Si la subida a S3 fue exitosa, guardamos la información en la base de datos
+    if "exitosamente" in mensaje:
+        nuevo_kml = KML(
+            ruta_archivo=f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}',
+            us_asociado=productor.id_usuario  # Usar id_usuario del productor
+        )
+        db.session.add(nuevo_kml)
+        db.session.commit()
+
+        return jsonify({
+            "msg": "Archivo KML cargado exitosamente",
+            "geojson": geojson_data
+        }), 200
+    else:
+        return jsonify({"msg": mensaje}), 400
+    
+
+@routes.route('/api/productor/kml', methods=['GET'])
+def obtener_kml_por_productor():
+    # Obtener el código del productor desde los parámetros
+    cod_productor = request.args.get('cod_productor')
+    
+    if not cod_productor:
+        return jsonify({'error': 'Código del productor no proporcionado'}), 400
+
+    # Eliminar espacios y caracteres extraños del código
+    cod_productor = cod_productor.strip()
+    print(f"Valor de cod_productor recibido: {cod_productor}")
+
+    # Buscar el productor en la base de datos
+    productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
+
+    if not productor:
+        return jsonify({'error': 'Productor no encontrado'}), 404
+
+    # Obtener los KML asociados al productor
+    kmls = KML.query.filter_by(us_asociado=productor.id_usuario).all()
+
+    if not kmls:
+        return jsonify({
+            'productor': productor.nombre,
+            'cod_productor': productor.cod_productor,
+            'kmls': []
+        }), 200
+
+    # Serializar los datos y enviarlos como respuesta
+    return jsonify({
+        'productor': productor.nombre,
+        'cod_productor': productor.cod_productor,
+        'kmls': [kml.serialize() for kml in kmls]
+    }), 200
+
+
+
+
+    
 
 

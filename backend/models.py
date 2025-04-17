@@ -47,8 +47,6 @@ class TipoUsuario(db.Model):
 class KML(db.Model):
     __tablename__ = 'kml'
     id_kml = Column(Integer, primary_key=True, autoincrement=True)
-    area = Column(String(255), nullable=False)
-    poligono = Column(String(255), nullable=False)
     ruta_archivo = Column(String(255), nullable=False)
     fecha_subida = Column(DateTime, default=datetime.utcnow)
     us_asociado = Column(Integer, ForeignKey('usuarios.id_usuario'), nullable=False)
@@ -59,8 +57,6 @@ class KML(db.Model):
     def serialize(self):
         return {
             'id_kml': self.id_kml,
-            'area': self.area,
-            'poligono': self.poligono,
             'ruta_archivo': self.ruta_archivo,
             'fecha_subida': self.fecha_subida,
             'us_asociado': self.us_asociado

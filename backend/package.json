@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@mapbox/togeojson": "^0.16.2",
+    "leaflet": "^1.9.4",
+    "leaflet-filelayer": "^1.0.0",
+    "leaflet-kml": "^1.0.1",
+    "leaflet-omnivore": "^0.3.0"
+  }
+}
