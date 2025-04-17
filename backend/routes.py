@@ -6,6 +6,8 @@ from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchiv
 from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3
 from config import Config
 import xml.etree.ElementTree as ET
+from sqlalchemy.orm import joinedload
+
 
 
 def kml_to_geojson(kml_data):
@@ -455,6 +457,8 @@ def subir_kml():
         return jsonify({"msg": mensaje}), 400
     
 
+from sqlalchemy.orm import subqueryload
+
 @routes.route('/api/productor/kml', methods=['GET'])
 def obtener_kml_por_productor():
     # Obtener el código del productor desde los parámetros
@@ -473,8 +477,8 @@ def obtener_kml_por_productor():
     if not productor:
         return jsonify({'error': 'Productor no encontrado'}), 404
 
-    # Obtener los KML asociados al productor
-    kmls = KML.query.filter_by(us_asociado=productor.id_usuario).all()
+    # Obtener los KML asociados al productor con los archivos relacionados
+    kmls = KML.query.filter_by(us_asociado=productor.id_usuario).options(subqueryload(KML.archivos)).all()
 
     if not kmls:
         return jsonify({
@@ -483,12 +487,20 @@ def obtener_kml_por_productor():
             'kmls': []
         }), 200
 
-    # Serializar los datos y enviarlos como respuesta
+    # Diagnóstico: Verificar los archivos cargados
+    for kml in kmls:
+        print(f"KML ID {kml.id_kml} tiene los siguientes archivos asociados:")
+        for archivo in kml.archivos:  # Usar los archivos ya cargados por subqueryload
+            print(f"- {archivo.nombre}, Ruta de descarga: {archivo.ruta_descarga}")
+
+    # Serializar los datos y enviarlos
     return jsonify({
         'productor': productor.nombre,
         'cod_productor': productor.cod_productor,
         'kmls': [kml.serialize() for kml in kmls]
     }), 200
+
+
 
 
 

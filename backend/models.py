@@ -52,14 +52,15 @@ class KML(db.Model):
     us_asociado = Column(Integer, ForeignKey('usuarios.id_usuario'), nullable=False)
     
     usuario = relationship("Usuario", back_populates="kmls")
-    archivos = relationship("Archivo", back_populates="kml")
+    archivos = relationship("Archivo", back_populates="kml", lazy='joined')
 
     def serialize(self):
         return {
             'id_kml': self.id_kml,
             'ruta_archivo': self.ruta_archivo,
             'fecha_subida': self.fecha_subida,
-            'us_asociado': self.us_asociado
+            'us_asociado': self.us_asociado,
+            'archivos': [archivo.serialize() for archivo in self.archivos]
         }
 
 class KMLTaipas(db.Model):

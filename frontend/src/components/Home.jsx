@@ -150,333 +150,127 @@ const Home = () => {
     navigate("/");
   };
 
-// Función mejorada para cargar KMLs en el mapa
-const cargarKmlEnMapa = (kmlUrl, nombre, tieneArchivos) => {
-  return new Promise((resolve, reject) => {
-    fetch(kmlUrl)
-      .then(res => res.text())
-      .then(kmlText => {
-        const parser = new DOMParser();
-        const kml = parser.parseFromString(kmlText, "text/xml");
-        const geojson = toGeoJSON.kml(kml);
-
-        // Estilo para los polígonos
-        const estiloPoligono = {
-          color: tieneArchivos ? '#3388ff' : '#ff0000',  // Azul si tiene archivos, rojo si no
-          weight: 3,
-          opacity: 0.7,
-          fillColor: tieneArchivos ? '#3388ff' : '#ff0000', // Rojo si no tiene archivos
-          fillOpacity: 0.2
-        };
-
-        // Estilo para las líneas
-        const estiloLinea = {
-          color: '#ff7800',  // Naranja
-          weight: 2,
-          opacity: 0.7,
-          dashArray: '5, 5'
-        };
-
-        // Estilo para puntos
-        const estiloPunto = {
-          radius: 6,
-          fillColor: "#ff7800",
-          color: "#000",
-          weight: 1,
-          opacity: 1,
-          fillOpacity: 0.8
-        };
-
-        const capa = L.geoJSON(geojson, {
-          style: function(feature) {
-            // Aplicar diferentes estilos según el tipo de geometría
-            switch(feature.geometry.type) {
-              case 'Polygon':
-              case 'MultiPolygon':
-                return estiloPoligono;
-              case 'LineString':
-              case 'MultiLineString':
-                return estiloLinea;
-              default:
-                return {
-                  color: '#3388ff',
-                  weight: 2
-                };
-            }
-          },
-          pointToLayer: (feature, latlng) => {
-            return L.circleMarker(latlng, estiloPunto);
-          },
-          onEachFeature: (feature, layer) => {
-            // Mostrar popup con información
-            let popupContent = `<b>${nombre || 'KML'}</b>`;
-            
-            if (feature.properties) {
-              if (feature.properties.name) {
+  const cargarKmlEnMapa = (kmlUrl, nombre, archivos) => {
+    return new Promise((resolve, reject) => {
+      fetch(kmlUrl)
+        .then((res) => res.text())
+        .then((kmlText) => {
+          const parser = new DOMParser();
+          const kml = parser.parseFromString(kmlText, "text/xml");
+          const geojson = toGeoJSON.kml(kml);
+  
+          const capa = L.geoJSON(geojson, {
+            style: (feature) => {
+              const poligonoNombre = feature.properties?.name?.toString();
+              console.log("Nombre del polígono:", poligonoNombre); // Para depuración
+  
+              const tieneArchivos = archivos.some((archivo) => {
+                // Extraer todos los cuadros del nombre del archivo
+                const cuadros = archivo.match(/_C(\d+)(?=_|$)/g)?.map((match) => match.slice(2)) || [];
+                console.log("Cuadros extraídos del archivo:", cuadros); // Para depuración
+                return cuadros.includes(poligonoNombre);
+              });
+  
+              console.log("Tiene archivos asociados:", tieneArchivos); // Para depuración
+  
+              return {
+                color: tieneArchivos ? "#28a745" : "#dc3545", // Verde si tiene archivos, rojo si no
+                weight: 3,
+                opacity: 0.7,
+                fillColor: tieneArchivos ? "#28a745" : "#dc3545",
+                fillOpacity: 0.2,
+              };
+            },
+            onEachFeature: (feature, layer) => {
+              const poligonoNombre = feature.properties?.name?.toString();
+              const tieneArchivos = archivos.some((archivo) => {
+                const cuadros = archivo.match(/_C(\d+)(?=_|$)/g)?.map((match) => match.slice(2)) || [];
+                return cuadros.includes(poligonoNombre);
+              });
+  
+              let popupContent = `<b>${nombre || "KML"}</b>`;
+              if (feature.properties?.name) {
                 popupContent += `<br>Nombre: ${feature.properties.name}`;
               }
-              if (feature.properties.description) {
-                popupContent += `<br>${feature.properties.description}`;
-              }
-            }
-
-            layer.bindPopup(popupContent);
-
-            // Mostrar área si es un polígono
-            if (layer.getBounds && feature.geometry.type === 'Polygon') {
-              try {
-                const area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
-                const areaHectareas = (area / 10000).toFixed(2);
-                layer.bindPopup(`${popupContent}<br>Área: ${areaHectareas} ha`);
-              } catch (e) {
-                console.error("Error calculando área:", e);
-              }
-            }
-          }
-        }).addTo(mapRef.current);
-
-        // Ajustar vista del mapa para mostrar todos los KMLs
-        if (mapRef.current && capa.getBounds) {
-          const bounds = capa.getBounds();
-          if (bounds.isValid()) {
-            mapRef.current.fitBounds(bounds, { padding: [50, 50] });
-          }
-        }
-
-        resolve(capa);
-      })
-      .catch(error => {
-        console.error("Error cargando KML:", error);
-        reject(error);
-      });
-  });
-};
-
-// Función para cargar todos los KMLs de un productor
-const cargarKmlsProductor = async (codProductor) => {
-  if (!codProductor) return;
-
-  setKmlError(null);
-  setCargandoKml(true);
-
-  try {
-    // Limpiar capas anteriores
-    if (kmlLayers.length > 0) {
-      kmlLayers.forEach(layer => {
-        mapRef.current?.removeLayer(layer);
-      });
-      setKmlLayers([]);
-    }
-
-    const response = await fetch(`${apiUrl}api/productor/kml?cod_productor=${codProductor}`);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Error al obtener KMLs');
-    }
-
-    setKmlData(data);
-
-    if (data.kmls && data.kmls.length > 0) {
-      const nuevasCapas = [];
-      
-      for (const kml of data.kmls) {
-        try {
-          const nombreKml = kml.ruta_archivo.split('/').pop();
-          const tieneArchivos = kml.archivos && kml.archivos.length > 0; // Verificar si tiene archivos asociados
-          const capa = await cargarKmlEnMapa(kml.ruta_archivo, nombreKml, tieneArchivos);
-          nuevasCapas.push(capa);
-        } catch (error) {
-          console.error(`Error cargando KML ${kml.ruta_archivo}:`, error);
-        }
-      }
-      
-      setKmlLayers(nuevasCapas);
-    }
-  } catch (error) {
-    setKmlError(`Error al cargar KMLs: ${error.message}`);
-    console.error(error);
-  } finally {
-    setCargandoKml(false);
-  }
-};
-
-useEffect(() => {
-  if (productorSeleccionado) {
-    fetchArchivos(productorSeleccionado, "");
-    cargarKmlsProductor(productorSeleccionado);
-  } else {
-    setKmlData(null);
-    setKmlLayers([]);
-    setKmlError(null);
-  }
-}, [productorSeleccionado]);
-
-useEffect(() => {
-  if (mapRef.current) return;
-
-  const map = L.map("map").setView([-32.5228, -55.7658], 6.5);
-
-  const osmLayer = L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-      attribution: "&copy; OpenStreetMap contributors",
-    }
-  ).addTo(map);
-
-  const satelliteLayer = L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution:
-        "Tiles &copy; Esri &mdash; Source: Esri, Earthstar Geographics",
-    }
-  );
-
-  const drawnItems = new L.FeatureGroup();
-  map.addLayer(drawnItems);
-
-  const drawControl = new L.Control.Draw({
-    draw: {
-      polyline: isMobile ? true : false,
-      polygon: isMobile
-        ? false
-        : {
-            allowIntersection: false,
-            showArea: true,
-            metric: true,
-            shapeOptions: {
-              color: "#bada55",
+              popupContent += `<br>Archivos Asociados: ${
+                tieneArchivos ? "Sí" : "No"
+              }`;
+              layer.bindPopup(popupContent);
             },
-          },
-      rectangle: false,
-      circle: false,
-      marker: false,
-      circlemarker: false,
-    },
-    edit: {
-      featureGroup: drawnItems,
-    },
-  });
-
-  map.addControl(drawControl);
-
-  map.on(L.Draw.Event.CREATED, (e) => {
-    const layer = e.layer;
-    drawnItems.addLayer(layer);
-
-    if (!isMobile && layer instanceof L.Polygon) {
-      const latlngs = layer.getLatLngs()[0];
-      try {
-        const area = L.GeometryUtil.geodesicArea(latlngs);
-        const readableArea = L.GeometryUtil.readableArea(area, true);
-        layer.bindPopup(`Área: ${readableArea}`).openPopup();
-      } catch (error) {
-        console.error("Error al calcular el área:", error);
+          }).addTo(mapRef.current);
+  
+          if (mapRef.current && capa.getBounds) {
+            const bounds = capa.getBounds();
+            if (bounds.isValid()) {
+              mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+            }
+          }
+  
+          resolve(capa);
+        })
+        .catch((error) => {
+          console.error("Error cargando el KML:", error); // Para depuración
+          reject(error);
+        });
+    });
+  };
+  
+  
+  const cargarKmlsProductor = async (codProductor) => {
+    if (!codProductor) return;
+  
+    setCargandoKml(true);
+  
+    try {
+      const response = await fetch(`${apiUrl}api/productor/kml?cod_productor=${codProductor}`);
+      const data = await response.json();
+  
+      setKmlData(data);
+  
+      if (data.kmls && data.kmls.length > 0) {
+        const nuevasCapas = [];
+        for (const kml of data.kmls) {
+          try {
+            const nombreKml = kml.ruta_archivo.split('/').pop();
+            const archivos = kml.archivos.map((archivo) => archivo.nombre);
+  
+            const capa = await cargarKmlEnMapa(kml.ruta_archivo, nombreKml, archivos);
+            nuevasCapas.push(capa);
+          } catch (error) {
+            console.error(`Error cargando KML ${kml.ruta_archivo}:`, error);
+          }
+        }
+        setKmlLayers(nuevasCapas);
       }
-    }
-  });
-
-  const baseMaps = {
-    OpenStreetMap: osmLayer,
-    "Satélite (Esri)": satelliteLayer,
-  };
-
-  L.control.layers(baseMaps).addTo(map);
-
-  mapRef.current = map;
-
-  return () => {
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
+    } catch (error) {
+      setKmlError(error.message);
+    } finally {
+      setCargandoKml(false);
     }
   };
-}, [isMobile]);
-
-if (mostrarCargarArchivos) {
-  return (
-    <CargarArchivos
-      productorId={productorSeleccionado}
-      tiposArchivo={tiposArchivo}
-      onBack={() => setMostrarCargarArchivos(false)}
-    />
-  );
-}
-
-
+  
 
   useEffect(() => {
-    if (mapRef.current) return;
+    if (productorSeleccionado) {
+      fetchArchivos(productorSeleccionado, "");
+      cargarKmlsProductor(productorSeleccionado);
+    } else {
+      setKmlData(null);
+      setKmlLayers([]);
+      setKmlError(null);
+    }
+  }, [productorSeleccionado]);
 
-    const map = L.map("map").setView([-32.5228, -55.7658], 6.5);
+  useEffect(() => {
+    const map = L.map("map").setView([-32.5228, -55.7658], 6);
 
     const osmLayer = L.tileLayer(
       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      {
-        attribution: "&copy; OpenStreetMap contributors",
-      }
+      { attribution: "&copy; OpenStreetMap contributors" }
     ).addTo(map);
 
-    const satelliteLayer = L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      {
-        attribution:
-          "Tiles &copy; Esri &mdash; Source: Esri, Earthstar Geographics",
-      }
-    );
-
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
-
-    const drawControl = new L.Control.Draw({
-      draw: {
-        polyline: isMobile ? true : false,
-        polygon: isMobile
-          ? false
-          : {
-              allowIntersection: false,
-              showArea: true,
-              metric: true,
-              shapeOptions: {
-                color: "#bada55",
-              },
-            },
-        rectangle: false,
-        circle: false,
-        marker: false,
-        circlemarker: false,
-      },
-      edit: {
-        featureGroup: drawnItems,
-      },
-    });
-
-    map.addControl(drawControl);
-
-    map.on(L.Draw.Event.CREATED, (e) => {
-      const layer = e.layer;
-      drawnItems.addLayer(layer);
-
-      if (!isMobile && layer instanceof L.Polygon) {
-        const latlngs = layer.getLatLngs()[0];
-        try {
-          const area = L.GeometryUtil.geodesicArea(latlngs);
-          const readableArea = L.GeometryUtil.readableArea(area, true);
-          layer.bindPopup(`Área: ${readableArea}`).openPopup();
-        } catch (error) {
-          console.error("Error al calcular el área:", error);
-        }
-      }
-    });
-
-    const baseMaps = {
-      OpenStreetMap: osmLayer,
-      "Satélite (Esri)": satelliteLayer,
-    };
-
-    L.control.layers(baseMaps).addTo(map);
-
     mapRef.current = map;
+  
 
     return () => {
       if (mapRef.current) {
