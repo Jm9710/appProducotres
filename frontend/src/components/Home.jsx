@@ -158,23 +158,20 @@ const Home = () => {
           const parser = new DOMParser();
           const kml = parser.parseFromString(kmlText, "text/xml");
           const geojson = toGeoJSON.kml(kml);
-  
+
           const capa = L.geoJSON(geojson, {
             style: (feature) => {
               const poligonoNombre = feature.properties?.name?.toString();
-              console.log("Nombre del polígono:", poligonoNombre); // Para depuración
-  
               const tieneArchivos = archivos.some((archivo) => {
-                // Extraer todos los cuadros del nombre del archivo
-                const cuadros = archivo.match(/_C(\d+)(?=_|$)/g)?.map((match) => match.slice(2)) || [];
-                console.log("Cuadros extraídos del archivo:", cuadros); // Para depuración
+                const cuadros =
+                  archivo
+                    .match(/_C(\d+)(?=_|$)/g)
+                    ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
               });
-  
-              console.log("Tiene archivos asociados:", tieneArchivos); // Para depuración
-  
+
               return {
-                color: tieneArchivos ? "#28a745" : "#dc3545", // Verde si tiene archivos, rojo si no
+                color: tieneArchivos ? "#28a745" : "#dc3545",
                 weight: 3,
                 opacity: 0.7,
                 fillColor: tieneArchivos ? "#28a745" : "#dc3545",
@@ -183,58 +180,100 @@ const Home = () => {
             },
             onEachFeature: (feature, layer) => {
               const poligonoNombre = feature.properties?.name?.toString();
-              const tieneArchivos = archivos.some((archivo) => {
-                const cuadros = archivo.match(/_C(\d+)(?=_|$)/g)?.map((match) => match.slice(2)) || [];
+              const archivosAsociados = archivos.filter((archivo) => {
+                const cuadros =
+                  archivo
+                    .match(/_C(\d+)(?=_|$)/g)
+                    ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
               });
-  
-              let popupContent = `<b>${nombre || "KML"}</b>`;
-              if (feature.properties?.name) {
-                popupContent += `<br>Nombre: ${feature.properties.name}`;
+
+              // Calcular el área del polígono
+              let areaFormatted = "N/A";
+              if (
+                feature.geometry.type === "Polygon" ||
+                feature.geometry.type === "MultiPolygon"
+              ) {
+                const coords =
+                  feature.geometry.type === "Polygon"
+                    ? feature.geometry.coordinates[0].map(([lng, lat]) =>
+                        L.latLng(lat, lng)
+                      )
+                    : feature.geometry.coordinates[0][0].map(([lng, lat]) =>
+                        L.latLng(lat, lng)
+                      );
+                const area = L.GeometryUtil.geodesicArea(coords);
+                areaFormatted = (area / 10000).toFixed(2); // Convertir a hectáreas (ha)
               }
-              popupContent += `<br>Archivos Asociados: ${
-                tieneArchivos ? "Sí" : "No"
-              }`;
+
+              // Popup simplificado (solo nombre, área y archivos)
+              let popupContent = "";
+              if (feature.properties?.name) {
+                const poligonoNombre = "C " + feature.properties.name; // Prefijo C + nombre
+                popupContent += `<b>${poligonoNombre}</b><br>`;
+              }
+              popupContent += `Área: ${areaFormatted} ha`;
+
+              if (archivosAsociados.length > 0) {
+                popupContent += `<br>Archivos:<br><ul>`;
+                popupContent += archivosAsociados
+                  .map((archivo) => {
+                    // Aquí puedes ajustar el nombre de archivo a tu formato deseado
+                    const nombreArchivo = archivo.split("/").pop(); // Obtener el nombre del archivo
+                    const nombreAjustado = nombreArchivo.replace(/_/g, " "); // Reemplazar guiones bajos con espacios
+
+                    return `<li><a href="${archivo}" target="_blank" download>${nombreAjustado}</a></li>`;
+                  })
+                  .join("");
+                popupContent += `</ul>`;
+              }
+
               layer.bindPopup(popupContent);
             },
           }).addTo(mapRef.current);
-  
+
+          // Ajustar el mapa para que muestre el contenido del KML
           if (mapRef.current && capa.getBounds) {
             const bounds = capa.getBounds();
             if (bounds.isValid()) {
               mapRef.current.fitBounds(bounds, { padding: [50, 50] });
             }
           }
-  
+
           resolve(capa);
         })
         .catch((error) => {
-          console.error("Error cargando el KML:", error); // Para depuración
+          console.error("Error cargando el KML:", error);
           reject(error);
         });
     });
   };
-  
-  
+
   const cargarKmlsProductor = async (codProductor) => {
     if (!codProductor) return;
-  
+
     setCargandoKml(true);
-  
+
     try {
-      const response = await fetch(`${apiUrl}api/productor/kml?cod_productor=${codProductor}`);
+      const response = await fetch(
+        `${apiUrl}api/productor/kml?cod_productor=${codProductor}`
+      );
       const data = await response.json();
-  
+
       setKmlData(data);
-  
+
       if (data.kmls && data.kmls.length > 0) {
         const nuevasCapas = [];
         for (const kml of data.kmls) {
           try {
-            const nombreKml = kml.ruta_archivo.split('/').pop();
+            const nombreKml = kml.ruta_archivo.split("/").pop();
             const archivos = kml.archivos.map((archivo) => archivo.nombre);
-  
-            const capa = await cargarKmlEnMapa(kml.ruta_archivo, nombreKml, archivos);
+
+            const capa = await cargarKmlEnMapa(
+              kml.ruta_archivo,
+              nombreKml,
+              archivos
+            );
             nuevasCapas.push(capa);
           } catch (error) {
             console.error(`Error cargando KML ${kml.ruta_archivo}:`, error);
@@ -248,7 +287,6 @@ const Home = () => {
       setCargandoKml(false);
     }
   };
-  
 
   useEffect(() => {
     if (productorSeleccionado) {
@@ -270,7 +308,6 @@ const Home = () => {
     ).addTo(map);
 
     mapRef.current = map;
-  
 
     return () => {
       if (mapRef.current) {
@@ -318,12 +355,6 @@ const Home = () => {
           >
             {botonesVisible ? "Ocultar opciones" : "Mostrar opciones"}
           </button>
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => setMenuVisible(!menuVisible)}
-          >
-            {menuVisible ? "Ocultar menú" : "Mostrar menú"}
-          </button>
         </div>
 
         <div
@@ -368,70 +399,6 @@ const Home = () => {
               </option>
             ))}
           </select>
-        </div>
-
-        <div
-          className={`bg-light shadow-sm p-2 ${
-            menuVisible ? "d-flex" : "d-none"
-          } flex-wrap align-items-center justify-content-between d-md-flex`}
-        >
-          <h4>Categorías</h4>
-          <div>
-            <button
-              className={`btn btn-sm ${
-                categoriaSeleccionada === "Taipas"
-                  ? "btn-secondary"
-                  : "btn-outline-secondary"
-              }`}
-              onClick={() => handleCategoriaClick("Taipas")}
-            >
-              Taipas
-            </button>
-            <button
-              className={`btn btn-sm ${
-                categoriaSeleccionada === "Desgotes"
-                  ? "btn-secondary"
-                  : "btn-outline-secondary"
-              }`}
-              onClick={() => handleCategoriaClick("Desgotes")}
-            >
-              Desgotes
-            </button>
-            <button
-              className={`btn btn-sm ${
-                categoriaSeleccionada === "Informes"
-                  ? "btn-secondary"
-                  : "btn-outline-secondary"
-              }`}
-              onClick={() => handleCategoriaClick("Informes")}
-            >
-              Informes
-            </button>
-          </div>
-          <div className="p-3">
-            <h4>
-              Archivos de {categoriaSeleccionada || "todas las categorías"}
-            </h4>
-            {loading ? (
-              <div>Loading...</div>
-            ) : archivosMostrados.length > 0 ? (
-              <ul>
-                {archivosMostrados.map((archivo) => (
-                  <li key={archivo.id_archivo}>
-                    <a
-                      href={archivo.ruta_descarga}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {archivo.nombre}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>No se encontraron archivos</p>
-            )}
-          </div>
         </div>
 
         <div id="map" className="flex-grow-1"></div>
@@ -533,110 +500,53 @@ const Home = () => {
           ))}
         </select>
       </div>
-      <div className="d-flex align-items-center justify-content-between bg-light shadow-sm p-2">
-        <div className="d-flex align-items-center">
-          <button
-            className={`btn btn-primary me-2 ${
-              categoriaSeleccionada === "Taipas" ? "active" : ""
-            }`}
-            onClick={() => handleCategoriaClick("Taipas")}
-          >
-            Taipas
-          </button>
-          <button
-            className={`btn btn-primary me-2 ${
-              categoriaSeleccionada === "Desgotes" ? "active" : ""
-            }`}
-            onClick={() => handleCategoriaClick("Desgotes")}
-          >
-            Desgotes
-          </button>
-          <button
-            className={`btn btn-primary me-2 ${
-              categoriaSeleccionada === "Informes" ? "active" : ""
-            }`}
-            onClick={() => handleCategoriaClick("Informes")}
-          >
-            Informes
-          </button>
-        </div>
-      </div>
-      <div
-        className="row m-0 flex-grow-1 w-100 h-100"
-        style={{ height: "100vh" }}
-      >
-        {/* Botón para colapsar */}
-        <div className={`col-${archivosColapsados ? "1" : "3"} p-3`}>
-          <button
-            className="btn btn-sm btn-primary mb-3"
-            onClick={() => setArchivosColapsados(!archivosColapsados)}
-          >
-            {archivosColapsados ? ">" : "<"}
-          </button>
-          {!archivosColapsados && (
-            <>
-              <h4>
-                Archivos de {categoriaSeleccionada || "todas las categorías"}
-              </h4>
-              {loading ? (
-                <div>Loading...</div>
-              ) : archivosMostrados.length > 0 ? (
-                <ul>
-                  {archivosMostrados.map((archivo) => (
-                    <li key={archivo.id_archivo}>
-                      <a
-                        href={archivo.ruta_descarga}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {archivo.nombre}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No hay archivos disponibles para esta categoría.</p>
-              )}
-            </>
-          )}
-        </div>
 
-{/* Mapa */}
-<main
-  className={`col-${archivosColapsados ? "11" : "9"} p-0`}
-  style={{ 
-    height: "100vh",
-    position: "relative"
-  }}
->
-  <div 
-    id="map" 
-    style={{ 
-      height: "100%", 
-      width: "100%",
-      background: "#e8e8e8"
-    }} 
-  />
-  {cargandoKml && (
-    <div 
-      style={{
-        position: "absolute",
-        top: "10px",
-        right: "10px",
-        zIndex: 1000,
-        padding: "5px 10px",
-        background: "white",
-        borderRadius: "5px",
-        boxShadow: "0 0 5px rgba(0,0,0,0.2)"
-      }}
-    >
-      <div className="spinner-border spinner-border-sm text-primary" role="status">
-        <span className="visually-hidden">Cargando KML...</span>
-      </div>
-      <span className="ms-2">Cargando KMLs...</span>
-    </div>
-  )}
-</main>
+      <div
+        className="d-flex flex-column vh-100"
+        style={{
+          margin: 0,
+          padding: 0,
+          overflow: "hidden",
+        }}
+      >
+        {/* Mapa a pantalla completa */}
+        <main
+          className="flex-grow-1 position-relative"
+          style={{
+            height: "100%",
+          }}
+        >
+          <div
+            id="map"
+            style={{
+              height: "100%",
+              width: "100%",
+              background: "#e8e8e8",
+            }}
+          />
+          {cargandoKml && (
+            <div
+              style={{
+                position: "absolute",
+                top: "10px",
+                right: "10px",
+                zIndex: 1000,
+                padding: "5px 10px",
+                background: "white",
+                borderRadius: "5px",
+                boxShadow: "0 0 5px rgba(0,0,0,0.2)",
+              }}
+            >
+              <div
+                className="spinner-border spinner-border-sm text-primary"
+                role="status"
+              >
+                <span className="visually-hidden">Cargando KML...</span>
+              </div>
+              <span className="ms-2">Cargando KMLs...</span>
+            </div>
+          )}
+        </main>
       </div>
 
       {showModal && (
