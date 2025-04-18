@@ -31,6 +31,7 @@ const Login = () => {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", user);
         localStorage.setItem("nombre", data.nombre);
+        localStorage.setItem("cod_productor", data.cod_productor);  // Guardamos el cod_productor
   
         if (data.tipo_usuario === "Oficina" || data.tipo_usuario === "Admin") {
           navigate("/home");

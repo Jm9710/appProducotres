@@ -12,6 +12,7 @@ import * as toGeoJSON from "@mapbox/togeojson";
 import CargarArchivos from "./CargarArchivos";
 import EliminarArchivo from "./EliminarArchivos";
 import CargarKml from "./CargarKml";
+import VerInformes from "./VerInformes";
 
 const Home = () => {
   const [nomUsuario, setNomUsuario] = useState("");
@@ -29,6 +30,7 @@ const Home = () => {
   const [archivosColapsados, setArchivosColapsados] = React.useState(false);
   const [showEliminarModal, setShowEliminarModal] = useState(false);
   const [showCargarKmlModal, setShowCargarKmlModal] = useState(false);
+  const [showInformesModal, setShowInformesModal] = useState(false);
   const [kmlLayers, setKmlLayers] = useState([]);
   const [cargandoKml, setCargandoKml] = useState(false);
   const [kmlData, setKmlData] = useState(null);
@@ -47,6 +49,15 @@ const Home = () => {
     }
     setShowModal(true);
   };
+
+  const handleVerInformesClick = () => {
+    if (!productorSeleccionado) {
+      alert("Por favor seleccione un productor primero");
+      return;
+    }
+    setShowInformesModal(true);
+  }
+
 
   const hanldeCargarKml = () => {
     if (!productorSeleccionado) {
@@ -476,6 +487,9 @@ const Home = () => {
           <button className="btn btn-primary me-2" onClick={hanldeCargarKml}>
             Cargar KML
           </button>
+          <button className="btn btn-primary me-2" onClick={handleVerInformesClick}>
+            Ver Informes
+          </button>
         </div>
         <select
           className="form-select w-auto"
@@ -630,6 +644,27 @@ const Home = () => {
           </div>
         </div>
       )}
+
+      {showInformesModal && (
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowInformesModal(false)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <VerInformes
+                  productorId={productorSeleccionado}
+                  onClose={() => setShowInformesModal(false)}
+                />
+              </div>
+            </div>
+          </div>
+      )}
+
     </div>
   );
 };

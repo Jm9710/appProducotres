@@ -267,18 +267,27 @@ def subir_archivo():
 
     # Si la subida a S3 fue exitosa, guardamos la información en la base de datos
     if "exitosamente" in mensaje:
+        # Obtener el KML asociado al productor
+        kml_asociado = KML.query.filter_by(us_asociado=productor.id_usuario).first()
+        if not kml_asociado:
+            print("No se ha encontrado un KML asociado al productor.")
+            return jsonify({"msg": "No se ha encontrado un KML asociado al productor."}), 400
+
+        # Guardar el archivo y asociarlo al KML
         nuevo_archivo = Archivo(
             nombre=filename,
             ruta_descarga=f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}',
             us_asociado=productor.id_usuario,  # Usar id_usuario en lugar de productor_id
-            TipoArchivo=tipo_archivo_id
+            TipoArchivo=tipo_archivo_id,
+            kml_asociado=kml_asociado.id_kml  # Asocia el archivo al KML
         )
         db.session.add(nuevo_archivo)
         db.session.commit()
 
-        return jsonify({"msg": "Archivo cargado exitosamente"}), 200
+        return jsonify({"msg": "Archivo cargado y asociado al KML exitosamente"}), 200
     else:
         return jsonify({"msg": mensaje}), 400
+
 
 
 
@@ -427,6 +436,14 @@ def subir_kml():
         print("Productor no encontrado")
         return jsonify({"msg": "Productor no encontrado"}), 404
 
+    # Verificar si ya existe un KML asociado a este productor
+    kml_existente = KML.query.filter_by(us_asociado=productor.id_usuario).first()
+    if kml_existente:
+        # Si ya existe un KML, eliminamos el anterior
+        print("Ya existe un KML asociado a este productor, lo eliminamos.")
+        db.session.delete(kml_existente)
+        db.session.commit()
+
     # Crear el prefijo para la "carpeta" en S3 usando el cod_productor
     ruta_s3 = f"{cod_productor}/kml/{filename}"
     print(f"Ruta de S3 generada: {ruta_s3}")  # Verifica la ruta generada
@@ -455,6 +472,7 @@ def subir_kml():
         }), 200
     else:
         return jsonify({"msg": mensaje}), 400
+
     
 
 from sqlalchemy.orm import subqueryload
