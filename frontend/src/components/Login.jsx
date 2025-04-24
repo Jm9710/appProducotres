@@ -3,6 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
+import { ClipLoader } from "react-spinners"; // Importa el spinner
 
 const Login = () => {
   const navigate = useNavigate();
@@ -10,11 +11,13 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(""); // Corregí "eror" a "error"
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const apiUrl = "http://127.0.0.1:3001/";
-
+  const apiUrl = "http://192.168.1.246:3001/";
+  //const apiUrl = "http://192.168.1.65:3001/";  
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
   
     try {
       const response = await fetch(`${apiUrl}api/login`, {
@@ -127,9 +130,15 @@ const Login = () => {
           </div>
           {error && <p className="text-danger">{error}</p>}{" "}
           {/* Muestra errores */}
-          <button type="submit" className="btn btn-primary w-100">
-            Iniciar sesión
-          </button>
+          { loading ? (
+            <div className="text-center">
+              <ClipLoader color="#007bff" loading={loading} size={30} />
+            </div>
+          ) : (
+            <button type="submit" className="btn btn-primary w-100">
+              Iniciar sesión
+            </button>
+          )}
         </form>
       </div>
     </div>

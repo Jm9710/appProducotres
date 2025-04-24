@@ -19,7 +19,7 @@ load_dotenv()
 
 # Configurar Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://192.168.1.246:3000"]}})
 
 
 # Configuración de la base de datos
@@ -42,4 +42,4 @@ app.register_blueprint(routes)
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=3001)
+    app.run(host="0.0.0.0", debug=True, port=3001)

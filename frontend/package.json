@@ -22,9 +22,11 @@
     "leaflet-kml": "^1.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-dropzone": "^14.3.8",
     "react-leaflet": "^5.0.0",
     "react-responsive": "^10.0.1",
-    "react-router-dom": "^7.3.0"
+    "react-router-dom": "^7.3.0",
+    "react-spinners": "^0.17.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

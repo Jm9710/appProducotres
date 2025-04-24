@@ -3,8 +3,8 @@ import React, { useState, useEffect } from "react";
 const EliminarArchivos = ({ productorId, onClose }) => {
   const [archivos, setArchivos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const apiUrl = "http://127.0.0.1:3001/";
-
+  const apiUrl = "http://192.168.1.246:3001/";
+  //const apiUrl = "http://192.168.1.65:3001/";
   useEffect(() => {
     if (!productorId) {
       setLoading(false);

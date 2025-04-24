@@ -1,57 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Añade useEffect aquí
 
-const CargarArchivos = ({ productorId, tiposArchivo }) => {
-  const [archivo, setArchivo] = useState(null);
+const CargarArchivos = ({ productorId, tiposArchivo, archivosPrecargados = [], onBack }) => {
+  const [archivos, setArchivos] = useState([]);
   const [tipoArchivo, setTipoArchivo] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const apiUrl = "http://127.0.0.1:3001/";
+  const apiUrl = "http://192.168.1.246:3001/";
+  //const apiUrl = "http://192.168.1.65:3001/";
+  // Carga inicial de archivos arrastrados
+  useEffect(() => {
+    if (archivosPrecargados.length > 0) {
+      setArchivos(archivosPrecargados);
+    }
+  }, [archivosPrecargados]);
 
   const handleFileChange = (e) => {
-    setArchivo(e.target.files[0]);
-  };
-
-  const handleTipoArchivoChange = (e) => {
-    setTipoArchivo(e.target.value);
+    if (e.target.files.length > 0) {
+      setArchivos(prev => [...prev, ...Array.from(e.target.files)]);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!archivo || !tipoArchivo) {
-      alert('Debe seleccionar un archivo y un tipo de archivo.');
-      return;
-    }
-
     setIsUploading(true);
 
     try {
       const token = localStorage.getItem("token");
+      
+      for (const file of archivos) {
+        const formData = new FormData();
+        formData.append('archivo', file);
+        formData.append('tipoArchivo', tipoArchivo);
+        formData.append('productorId', productorId);
 
-      const formData = new FormData();
-      formData.append('archivo', archivo);
-      formData.append('tipoArchivo', tipoArchivo);
-      formData.append('productorId', productorId);
+        const response = await fetch(`${apiUrl}api/subir_archivo`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        });
 
-      const response = await fetch(`${apiUrl}api/subir_archivo`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.msg || 'Error desconocido del servidor');
+        if (!response.ok) throw new Error(`Error subiendo ${file.name}`);
       }
 
-      alert('Archivo cargado exitosamente.');
-      
-       // Recargar la página principal (Home)
-    window.location.reload(); // Recarga la página
-
+      alert("Archivos subidos exitosamente!");
+      onBack();
+      window.location.reload();
     } catch (error) {
-      alert(`Error al cargar el archivo: ${error.message}`);
+      alert(`Error: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -60,27 +54,39 @@ const CargarArchivos = ({ productorId, tiposArchivo }) => {
   return (
     <div>
       <h4>Cargar Archivos</h4>
+      {archivos.length > 0 && (
+        <div className="mb-3">
+          <h6>Archivos seleccionados:</h6>
+          <ul className="list-group">
+            {archivos.map((file, index) => (
+              <li key={index} className="list-group-item">
+                {file.name} - {(file.size / (1024 * 1024)).toFixed(2)} MB
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <div className="mb-3">
-          <label htmlFor="fileInput" className="form-label">Seleccionar archivo</label>
           <input
             type="file"
             className="form-control"
-            id="fileInput"
             onChange={handleFileChange}
+            multiple
+            disabled={isUploading}
           />
         </div>
 
         <div className="mb-3">
-          <label htmlFor="tipoArchivo" className="form-label">Tipo de archivo</label>
           <select
             className="form-select"
-            id="tipoArchivo"
             value={tipoArchivo}
-            onChange={handleTipoArchivoChange}
+            onChange={(e) => setTipoArchivo(e.target.value)}
+            required
           >
             <option value="">Seleccionar tipo de archivo</option>
-            {(Array.isArray(tiposArchivo) ? tiposArchivo : []).map((tipo) => (
+            {tiposArchivo.map(tipo => (
               <option key={tipo.id_tipo_archivo} value={tipo.id_tipo_archivo}>
                 {tipo.tipo}
               </option>
@@ -88,8 +94,12 @@ const CargarArchivos = ({ productorId, tiposArchivo }) => {
           </select>
         </div>
 
-        <button type="submit" className="btn btn-primary" disabled={isUploading}>
-          {isUploading ? 'Subiendo...' : 'Subir archivo'}
+        <button 
+          type="submit" 
+          className="btn btn-primary"
+          disabled={isUploading || archivos.length === 0}
+        >
+          {isUploading ? 'Subiendo...' : `Subir ${archivos.length} archivo(s)`}
         </button>
       </form>
     </div>

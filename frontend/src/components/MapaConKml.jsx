@@ -3,14 +3,18 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-kml"; // Asegúrate de tener este paquete para cargar KML
 
+
 const MapWithKML = ({ productorId }) => {
   const [kmlUrls, setKmlUrls] = useState([]);
+
+  const apiUrl = "http://192.168.1.246:3001/";
+  //const apiUrl = "http://192.168.1.65:3001/";
 
   useEffect(() => {
     // Hacer una solicitud para obtener las URLs de los archivos KML del productor
     const fetchKMLUrls = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:3001/api/kml/${productorId}`);
+        const response = await fetch(`${apiUrl}/api/kml/${productorId}`);
         const data = await response.json();
         setKmlUrls(data); // Guardar las URLs de los archivos KML
       } catch (error) {
