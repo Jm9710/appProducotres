@@ -1,20 +1,20 @@
 # Usa una imagen base de Python
-FROM python:3.11-slim
+FROM python:3.12.3
 
-# Establece el directorio de trabajo
+# Actualiza e instala las dependencias necesarias del sistema
+RUN apt-get update && apt-get install -y libpq-dev
+
+# Establece el directorio de trabajo en el contenedor
 WORKDIR /app
 
-# Copia los archivos necesarios (ajusta si hay subcarpetas)
+# Copia el archivo requirements.txt al contenedor
 COPY requirements.txt /app/
 
-# Instala las dependencias
+# Instala las dependencias desde requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia el código de la aplicación
+# Copia el resto del código del backend al contenedor
 COPY . /app/
 
-# Expone el puerto 3001
+# Exponer el puerto en el que corre la aplicación Flask
 EXPOSE 3001
-
-# Comando para ejecutar la app
-CMD ["python", "app.py"]
