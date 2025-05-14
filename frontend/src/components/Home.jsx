@@ -17,6 +17,7 @@ import CargarKml from "./CargarKml";
 import VerInformes from "./VerInformes";
 import Clientes from "./Clientes";
 import { useDropzone } from "react-dropzone";
+import Select from "react-select";
 
 const Home = () => {
   const [nomUsuario, setNomUsuario] = useState("");
@@ -976,10 +977,16 @@ const Home = () => {
             Clientes
           </button>
         </div>
-        <select
-          className="form-select w-auto"
-          onChange={(e) => {
-            const selectedProductor = e.target.value;
+        <Select
+          className="basic-single"
+          classNamePrefix="select"
+          placeholder="Buscar productor..."
+          options={productores.map((prod) => ({
+            value: prod.cod_productor,
+            label: `${prod.cod_productor} - ${prod.nombre}`,
+          }))}
+          onChange={(selectedOption) => {
+            const selectedProductor = selectedOption?.value || "";
             setProductorSeleccionado(selectedProductor);
             setCategoriaSeleccionada("");
             if (selectedProductor) {
@@ -989,15 +996,33 @@ const Home = () => {
               setArchivosMostrados([]);
             }
           }}
-          value={productorSeleccionado || ""}
-        >
-          <option value="">Seleccionar productor</option>
-          {productores.map((prod) => (
-            <option key={prod.cod_productor} value={prod.cod_productor}>
-              {prod.cod_productor} - {prod.nombre}
-            </option>
-          ))}
-        </select>
+          value={
+            productorSeleccionado
+              ? {
+                  value: productorSeleccionado,
+                  label: `${productorSeleccionado} - ${
+                    productores.find(
+                      (p) => p.cod_productor === productorSeleccionado
+                    )?.nombre || ""
+                  }`,
+                }
+              : null
+          }
+          isClearable
+          isSearchable
+          noOptionsMessage={() => "No se encontraron productores"}
+          styles={{
+            control: (base) => ({
+              ...base,
+              minWidth: "250px",
+              width: "auto",
+            }),
+            menu: (base) => ({
+              ...base,
+              zIndex: 9999,
+            }),
+          }}
+        />
       </div>
 
       <div

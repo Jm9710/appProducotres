@@ -92,17 +92,20 @@ def obtener_usuarios():
 def actualizar_usuario(id_usuario):
     data = request.get_json()
 
-    if not data or not any(
-        key in data for key in ['nom_us', 'pass_us', 'nombre', 'tipo_us', 'premium']
-    ):
+    if not data:
         return jsonify({"msg": "Faltan datos"}), 400
     
     usuario = Usuario.query.get(id_usuario)
     if not usuario:
         return jsonify({"msg": "Usuario no encontrado"}), 404
     
+    # Aplicar hash a la contraseña si está presente en los datos
+    if 'pass_us' in data and data['pass_us']:
+        data['pass_us'] = generate_password_hash(data['pass_us'], method='pbkdf2:sha256')
+    
+    # Actualizar solo los campos que vienen en la solicitud
     for key in data:
-        if hasattr(usuario, key):
+        if hasattr(usuario, key) and key != 'id_usuario':  # Excluir el ID del usuario
             setattr(usuario, key, data[key])
         
     try:
@@ -110,7 +113,7 @@ def actualizar_usuario(id_usuario):
         return jsonify(usuario.serialize()), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"msg": "Error al actualizar el usuario"}), 500
+        return jsonify({"msg": "Error al actualizar el usuario", "error": str(e)}), 500
 
 #Endpoint para crear el tipo de usuario
 @routes.route('/api/tipo_usuario', methods=['POST'])
