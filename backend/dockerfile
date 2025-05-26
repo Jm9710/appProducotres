@@ -2,7 +2,14 @@
 FROM python:3.12.3
 
 # Actualiza e instala las dependencias necesarias del sistema
-RUN apt-get update && apt-get install -y libpq-dev
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    graphviz \
+    libgraphviz-dev \
+    pkg-config \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Establece el directorio de trabajo en el contenedor
 WORKDIR /app
@@ -19,5 +26,5 @@ COPY . /app/
 # Exponer el puerto en el que corre la aplicación Flask
 EXPOSE 3001
 
-# Comando por defecto (modifícalo según tu app)
+# Comando por defecto para iniciar la aplicación
 CMD ["python", "app.py"]
