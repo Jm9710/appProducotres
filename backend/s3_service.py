@@ -1,6 +1,6 @@
 import os
 import boto3
-from config import Config
+from backend.app_config import Config
 
 s3 = boto3.client(
     's3',
