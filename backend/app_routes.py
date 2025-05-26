@@ -296,31 +296,31 @@ def subir_archivo():
 
 @routes.route('/api/archivos', methods=['GET'])
 def listar_archivos():
-    # Obtener el productorId de la consulta (en lugar de usar JWT)
     productor_id = request.args.get('productorId')
 
     if not productor_id:
         return jsonify({'error': 'Productor ID no proporcionado'}), 400
 
-    # Buscar al usuario con el `cod_productor`
     productor = Usuario.query.filter_by(cod_productor=productor_id).first()
 
     if not productor:
         return jsonify({'error': 'Productor no encontrado'}), 404
 
-    # Obtener los archivos asociados al id_usuario del productor
     archivos = Archivo.query.filter_by(us_asociado=productor.id_usuario).all()
-    
     resultado = []
-    
-    # Serializar los archivos y agregar detalles del tipo de archivo
+
     for archivo in archivos:
         tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
         archivo_data = archivo.serialize()
         archivo_data['tipo_archivo'] = tipo_archivo.tipo if tipo_archivo else None
+
+        # Agregar encabezado MIME al archivo
+        archivo_data['mime_type'] = "application/x-rar-compressed" if archivo.nombre_archivo.endswith('.rar') else "application/octet-stream"
         resultado.append(archivo_data)
-    
-    return jsonify(resultado), 200
+
+    response = jsonify(resultado)
+    response.headers['Content-Type'] = 'application/json'
+    return response, 200
 
 @routes.route('/api/productor/archivos', methods=['GET'])
 def obtener_archivos_por_productor():
@@ -329,34 +329,42 @@ def obtener_archivos_por_productor():
 
     if not cod_productor:
         return jsonify({'error': 'Productor ID no proporcionado'}), 400
-    
+
     productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
 
     if not productor:
         return jsonify({'error': 'Productor no encontrado'}), 404
-    
-    # Filtrar por tipo de archivo si se especifica categoría
+
     query = Archivo.query.filter_by(us_asociado=productor.id_usuario)
     if categoria:
         tipo_archivo = TipoArchivo.query.filter_by(tipo=categoria).first()
         if tipo_archivo:
             query = query.filter_by(TipoArchivo=tipo_archivo.id_tipo_archivo)
-    
-    archivos = query.all()
 
+    archivos = query.all()
     archivos_clasificados = {}
+
     for archivo in archivos:
         tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
         tipo_nombre = tipo_archivo.tipo if tipo_archivo else 'Desconocido'
         if tipo_nombre not in archivos_clasificados:
             archivos_clasificados[tipo_nombre] = []
-        archivos_clasificados[tipo_nombre].append(archivo.serialize())
+        archivo_data = archivo.serialize()
 
-    return jsonify({
+        # Agregar encabezado MIME al archivo
+        archivo_data['mime_type'] = "application/x-rar-compressed" if archivo.nombre_archivo.endswith('.rar') else "application/octet-stream"
+        archivos_clasificados[tipo_nombre].append(archivo_data)
+
+    response_data = {
         'productor': productor.nombre,
         'cod_productor': productor.cod_productor,
         'archivos': archivos_clasificados
-    }), 200
+    }
+
+    response = jsonify(response_data)
+    response.headers['Content-Type'] = 'application/json'
+    return response, 200
+
 
 @routes.route('/api/eliminar_archivo', methods=['DELETE'])
 def eliminar_archivo():
