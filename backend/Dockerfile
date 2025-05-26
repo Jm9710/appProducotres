@@ -13,16 +13,16 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copia el archivo requirements.txt al contenedor
-COPY requirements.txt /app/
+COPY requirements.txt .
 
 # Instala las dependencias desde requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia el resto del código del backend al contenedor
-COPY . /app/
+COPY . .
 
 # Exponer el puerto en el que corre la aplicación Flask
 EXPOSE 3001
 
-# Comando por defecto para iniciar la aplicación
+# Comando por defecto para iniciar la aplicac
 CMD ["python", "app.py"]
