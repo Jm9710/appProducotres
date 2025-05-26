@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import Select from "react-select";
 
 const Clientes = () => {
-  const apiUrl = "http://192.168.1.246:3001/";
+  const apiUrl = "https://appproducotres-backend.onrender.com"
+
+  //const apiUrl = "http://192.168.1.246:3001/";
 
   const [activePanel, setActivePanel] = useState(null);
   const [clientes, setClientes] = useState([]);

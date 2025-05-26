@@ -4,7 +4,9 @@ const CargarKml = ({ productorId, onClose }) => {
   const [archivo, setArchivo] = useState(null);
   const [mensaje, setMensaje] = useState("");
   const [geojsonData, setGeojsonData] = useState(null);
-  const apiUrl = "http://192.168.1.246:3001/";
+  const apiUrl = "https://appproducotres-backend.onrender.com"
+
+  //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
   const handleFileChange = (e) => {
     setArchivo(e.target.files[0]);

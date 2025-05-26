@@ -7,7 +7,9 @@ import "leaflet-kml"; // Asegúrate de tener este paquete para cargar KML
 const MapWithKML = ({ productorId }) => {
   const [kmlUrls, setKmlUrls] = useState([]);
 
-  const apiUrl = "http://192.168.1.246:3001/";
+  const apiUrl = "https://appproducotres-backend.onrender.com"
+
+  //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
 
   useEffect(() => {

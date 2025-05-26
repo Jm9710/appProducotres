@@ -3,7 +3,9 @@ import React, { useState, useEffect } from "react";
 const VerInformesCliente = ({ onClose }) => {
   const [informes, setInformes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const apiUrl = "http://192.168.1.246:3001/";
+  const apiUrl = "https://appproducotres-backend.onrender.com"
+
+  //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
   useEffect(() => {
     const productorId = localStorage.getItem("cod_productor"); // Obtener el cod_productor desde localStorage

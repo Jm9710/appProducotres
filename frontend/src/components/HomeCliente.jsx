@@ -25,7 +25,9 @@ const HomeCliente = () => {
 
   const mapRef = useRef(null);
   const kmlBoundsRef = useRef(null); // Referencia para guardar los bounds del KML
-  const apiUrl = "http://192.168.1.246:3001/";
+  const apiUrl = "https://appproducotres-backend.onrender.com"
+
+  //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
   const isMobile = useMediaQuery({ maxWidth: 767 });
 
