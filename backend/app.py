@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash  # 🔹 Se corrigió el typo
 from models import db
 from admin import setup_admin
-from app_routesroutes import routes
+from app_routes import routes
 from config import Config
 
 
