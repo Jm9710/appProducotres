@@ -19,7 +19,7 @@ load_dotenv()
 
 # Configurar Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://192.168.1.246:3000"]}})
+CORS(app)
 
 
 # Configuración de la base de datos
