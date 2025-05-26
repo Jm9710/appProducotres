@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash  # 🔹 Se corrigió el typo
 from models import db
 from admin import setup_admin
-from backend.app_routes import routes
-from backend.app_config import Config
+from app_routes import routes
+from app_config import Config
 
 
 # Cargar variables de entorno

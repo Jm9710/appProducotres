@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 from flask_jwt_extended import create_access_token, jwt_required
 from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
 from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3
-from backend.app_config import Config
+from app_config import Config
 import xml.etree.ElementTree as ET
 from sqlalchemy.orm import joinedload
 
