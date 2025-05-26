@@ -3,8 +3,8 @@ import React, { useState, useEffect } from "react";
 const VerInformesCliente = ({ productorId, onClose }) => {
   const [informes, setInformes] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  const apiUrl = "https://appproducotres-backend.onrender.com"
+
+  const apiUrl = "https://appproducotres-backend.onrender.com/"
 
   //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";

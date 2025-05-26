@@ -47,7 +47,7 @@ const Home = () => {
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
 
-  const apiUrl = "https://appproducotres-backend.onrender.com"
+  const apiUrl = "https://appproducotres-backend.onrender.com/"
 
 
   //const apiUrl = "http://192.168.1.246:3001/";

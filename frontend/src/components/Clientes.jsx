@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import Select from "react-select";
 
 const Clientes = () => {
-  const apiUrl = "https://appproducotres-backend.onrender.com"
+  const apiUrl = "https://appproducotres-backend.onrender.com/"
 
   //const apiUrl = "http://192.168.1.246:3001/";
 

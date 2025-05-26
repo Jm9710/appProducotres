@@ -4,7 +4,7 @@ const CargarArchivos = ({ productorId, tiposArchivo, archivosPrecargados = [], o
   const [archivos, setArchivos] = useState([]);
   const [tipoArchivo, setTipoArchivo] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const apiUrl = "https://appproducotres-backend.onrender.com"
+  const apiUrl = "https://appproducotres-backend.onrender.com/"
   //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
   // Carga inicial de archivos arrastrados
