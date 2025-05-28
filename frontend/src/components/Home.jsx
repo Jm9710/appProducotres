@@ -251,25 +251,55 @@ const Home = () => {
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
               });
-
+            
               // Calcular el área del polígono
               let areaFormatted = "N/A";
-              if (
-                feature.geometry.type === "Polygon" ||
-                feature.geometry.type === "MultiPolygon"
-              ) {
+              let centro = null;
+            
+              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
                 const coords =
                   feature.geometry.type === "Polygon"
-                    ? feature.geometry.coordinates[0].map(([lng, lat]) =>
-                        L.latLng(lat, lng)
-                      )
-                    : feature.geometry.coordinates[0][0].map(([lng, lat]) =>
-                        L.latLng(lat, lng)
-                      );
+                    ? feature.geometry.coordinates[0].map(([lng, lat]) => L.latLng(lat, lng))
+                    : feature.geometry.coordinates[0][0].map(([lng, lat]) => L.latLng(lat, lng));
                 const area = L.GeometryUtil.geodesicArea(coords);
                 areaFormatted = (area / 10000).toFixed(2); // Convertir a hectáreas (ha)
+            
+                // Calcular el centro geométrico del polígono
+                centro = L.polygon(coords).getBounds().getCenter();
               }
-
+            
+// Agregar etiqueta en el centro del polígono
+if (centro && poligonoNombre) {
+  const etiqueta = L.marker(centro, {
+    icon: L.divIcon({
+      className: "polygon-label",
+      html: `<div class="label-container">${poligonoNombre}</div>`,
+      iconSize: [100, 30],
+      iconAnchor: [50, 15],
+    }),
+    interactive: false,
+    zIndexOffset: 1000,
+  }).addTo(mapRef.current);
+  
+  // Ocultar inicialmente
+  etiqueta.setOpacity(0);
+  
+  // Controlar visibilidad basada en el zoom
+  mapRef.current.on('zoomend', function() {
+    const currentZoom = mapRef.current.getZoom();
+    const polygonBounds = layer.getBounds();
+    const polygonSize = mapRef.current.latLngToLayerPoint(polygonBounds.getNorthEast())
+                      .subtract(mapRef.current.latLngToLayerPoint(polygonBounds.getSouthWest()));
+    
+    // Mostrar solo si estamos lo suficientemente cerca
+    const shouldShow = currentZoom >= 13 || // Zoom mínimo
+                     (polygonSize.x > 150 && polygonSize.y > 150); // Tamaño mínimo en píxeles
+    
+    etiqueta.setOpacity(shouldShow ? 1 : 0);
+  });
+}
+              
+            
               // Popup simplificado (solo nombre, área y archivos)
               let popupContent = "";
               if (feature.properties?.name) {
@@ -277,21 +307,19 @@ const Home = () => {
                 popupContent += `<b>${poligonoNombre}</b><br>`;
               }
               popupContent += `Área: ${areaFormatted} ha`;
-
+            
               if (archivosAsociados.length > 0) {
                 popupContent += `<br>Archivos:<br><ul>`;
                 popupContent += archivosAsociados
                   .map((archivo) => {
-                    // Aquí puedes ajustar el nombre de archivo a tu formato deseado
                     const nombreArchivo = archivo.split("/").pop(); // Obtener el nombre del archivo
                     const nombreAjustado = nombreArchivo.replace(/_/g, " "); // Reemplazar guiones bajos con espacios
-
                     return `<li><a href="${archivo}" target="_blank" download>${nombreAjustado}</a></li>`;
                   })
                   .join("");
                 popupContent += `</ul>`;
               }
-
+            
               layer.bindPopup(popupContent);
             },
           }).addTo(mapRef.current);

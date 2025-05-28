@@ -42,4 +42,26 @@ body,
   color: #888;
 }
 
+/* Estilos para las etiquetas de polígonos */
+.polygon-label .label-container {
+  font-size: 16px !important; /* Tamaño fijo */
+  font-weight: bold;
+  color: black;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  text-align: center;
+  transform: none !important; /* Anula cualquier transformación de Leaflet */
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
+.polygon-label {
+  pointer-events: none;
+}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import Select from "react-select";
 
 const Clientes = () => {
-  const apiUrl = "https://appproducotres-backend.onrender.com/"
+  const apiUrl = "https://appproducotres-backend.onrender.com/";
 
   //const apiUrl = "http://192.168.1.246:3001/";
 
@@ -19,7 +19,7 @@ const Clientes = () => {
     cod_productor: "",
     premium: false,
   });
-  
+
   const [editFormData, setEditFormData] = useState({
     id_usuario: "",
     pass_us: "",
@@ -116,14 +116,14 @@ const Clientes = () => {
     try {
       // Solo enviamos los campos editables
       const updateData = {
-        premium: editFormData.premium
+        premium: editFormData.premium,
       };
-      
+
       // Solo agregamos la contraseña si se proporcionó
       if (editFormData.pass_us) {
         updateData.pass_us = editFormData.pass_us;
       }
-  
+
       const response = await fetch(
         `${apiUrl}api/usuario/${editFormData.id_usuario}`,
         {
@@ -134,22 +134,30 @@ const Clientes = () => {
           body: JSON.stringify(updateData),
         }
       );
-  
+
       if (response.ok) {
-        setMessage({ type: "success", text: "Cliente actualizado exitosamente" });
+        setMessage({
+          type: "success",
+          text: "Cliente actualizado exitosamente",
+        });
         setEditFormData({
           id_usuario: "",
           pass_us: "",
           premium: false,
         });
         fetchClientes();
-        togglePanel("edit");
       } else {
         const error = await response.json();
-        setMessage({ type: "error", text: error.msg || "Error al actualizar el cliente" });
+        setMessage({
+          type: "error",
+          text: error.msg || "Error al actualizar el cliente",
+        });
       }
     } catch (error) {
-      setMessage({ type: "error", text: "No se pudo conectar con el servidor" });
+      setMessage({
+        type: "error",
+        text: "No se pudo conectar con el servidor",
+      });
     }
   };
 
@@ -157,27 +165,29 @@ const Clientes = () => {
   const handleDeleteSubmit = async (e) => {
     e.preventDefault();
     if (!deleteFormData.id_usuario) {
-      setMessage({ type: "error", text: "Seleccione un cliente para eliminar" });
+      setMessage({
+        type: "error",
+        text: "Seleccione un cliente para eliminar",
+      });
       return;
     }
-  
+
     if (!window.confirm("¿Está seguro que desea eliminar este cliente?")) {
       return;
     }
-  
-    setLoading(true); // Mostrar indicador de carga
-  
+
     try {
       const response = await fetch(
         `${apiUrl}api/usuario/${deleteFormData.id_usuario}`,
-        { method: "DELETE" }
+        {
+          method: "DELETE",
+        }
       );
-  
+
       if (response.ok) {
         setMessage({ type: "success", text: "Cliente eliminado exitosamente" });
         setDeleteFormData({ id_usuario: "" });
         fetchClientes();
-        togglePanel("delete");
       } else {
         const error = await response.json();
         setMessage({
@@ -190,8 +200,6 @@ const Clientes = () => {
         type: "error",
         text: "No se pudo conectar con el servidor",
       });
-    } finally {
-      setLoading(false); // Ocultar indicador de carga
     }
   };
 
@@ -239,12 +247,16 @@ const Clientes = () => {
 
       {/* Mensajes de estado */}
       {message && (
-        <div
-          className={`alert ${
-            message.type === "success" ? "alert-success" : "alert-danger"
-          } mt-3`}
-        >
-          {message.text}
+        <div className={`mt-2 alert alert-${message.type}`} role="alert">
+          <div className="d-flex justify-content-between align-items-center">
+            <span>{message.text}</span>
+            <button
+              type="button"
+              className="btn-close"
+              aria-label="Cerrar"
+              onClick={() => setMessage(null)}
+            ></button>
+          </div>
         </div>
       )}
 
@@ -329,101 +341,112 @@ const Clientes = () => {
         </div>
       )}
 
-{/* Panel Editar Cliente */}
-{activePanel === "edit" && (
-  <div className="border p-3 mt-3">
-    <h5>Editar Cliente</h5>
-    <form onSubmit={handleEditSubmit}>
-      <div className="mb-3">
-        <label htmlFor="editClientSelect" className="form-label">
-          Selecciona el Cliente
-        </label>
-        <Select
-          className="basic-single"
-          classNamePrefix="select"
-          placeholder="Buscar cliente..."
-          options={clientes.map(cliente => ({
-            value: cliente.id_usuario,
-            label: `${cliente.cod_productor || 'Sin código'} - ${cliente.nombre} (${cliente.nom_us})`
-          }))}
-          onChange={(selectedOption) => {
-            const clienteId = selectedOption?.value || "";
-            if (clienteId) {
-              loadClienteData(clienteId);
-            } else {
-              setEditFormData({
-                id_usuario: "",
-                pass_us: "",
-                premium: false,
-              });
-            }
-          }}
-          value={
-            editFormData.id_usuario
-              ? {
-                  value: editFormData.id_usuario,
-                  label: `${clientes.find(c => c.id_usuario == editFormData.id_usuario)?.cod_productor || 'Sin código'} - ${
-                    clientes.find(c => c.id_usuario == editFormData.id_usuario)?.nombre
-                  } (${
-                    clientes.find(c => c.id_usuario == editFormData.id_usuario)?.nom_us
-                  })`
+      {/* Panel Editar Cliente */}
+      {activePanel === "edit" && (
+        <div className="border p-3 mt-3">
+          <h5>Editar Cliente</h5>
+          <form onSubmit={handleEditSubmit}>
+            <div className="mb-3">
+              <label htmlFor="editClientSelect" className="form-label">
+                Selecciona el Cliente
+              </label>
+              <Select
+                className="basic-single"
+                classNamePrefix="select"
+                placeholder="Buscar cliente..."
+                options={clientes.map((cliente) => ({
+                  value: cliente.id_usuario,
+                  label: `${cliente.cod_productor || "Sin código"} - ${
+                    cliente.nombre
+                  } (${cliente.nom_us})`,
+                }))}
+                onChange={(selectedOption) => {
+                  const clienteId = selectedOption?.value || "";
+                  if (clienteId) {
+                    loadClienteData(clienteId);
+                  } else {
+                    setEditFormData({
+                      id_usuario: "",
+                      pass_us: "",
+                      premium: false,
+                    });
+                  }
+                }}
+                value={
+                  editFormData.id_usuario
+                    ? {
+                        value: editFormData.id_usuario,
+                        label: `${
+                          clientes.find(
+                            (c) => c.id_usuario == editFormData.id_usuario
+                          )?.cod_productor || "Sin código"
+                        } - ${
+                          clientes.find(
+                            (c) => c.id_usuario == editFormData.id_usuario
+                          )?.nombre
+                        } (${
+                          clientes.find(
+                            (c) => c.id_usuario == editFormData.id_usuario
+                          )?.nom_us
+                        })`,
+                      }
+                    : null
                 }
-              : null
-          }
-          isClearable
-          isSearchable
-          noOptionsMessage={() => "No se encontraron clientes"}
-          styles={{
-            control: (base) => ({
-              ...base,
-              minWidth: "250px",
-              width: "auto"
-            }),
-            menu: (base) => ({
-              ...base,
-              zIndex: 9999
-            })
-          }}
-        />
-      </div>
+                isClearable
+                isSearchable
+                noOptionsMessage={() => "No se encontraron clientes"}
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    minWidth: "250px",
+                    width: "auto",
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    zIndex: 9999,
+                  }),
+                }}
+              />
+            </div>
 
-      {editFormData.id_usuario && (
-        <>
-          <div className="mb-3">
-            <label htmlFor="editPassUs" className="form-label">
-              Nueva Contraseña
-            </label>
-            <input
-              type="password"
-              id="editPassUs"
-              name="pass_us"
-              className="form-control"
-              value={editFormData.pass_us}
-              onChange={handleEditChange}
-              placeholder="Dejar en blanco para no cambiar"
-            />
-          </div>
-          <div className="mb-3 form-check">
-            <input
-              type="checkbox"
-              id="editPremium"
-              name="premium"
-              checked={editFormData.premium}
-              onChange={handleEditChange}
-              className="form-check-input"
-            />
-            <label htmlFor="editPremium" className="form-check-label">
-              ¿Premium?
-            </label>
-          </div>
-          <button type="submit" className="btn btn-secondary">
-            Guardar Cambios
-            </button>
-        </>
+            {editFormData.id_usuario && (
+              <>
+                <div className="mb-3">
+                  <label htmlFor="editPassUs" className="form-label">
+                    Nueva Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    id="editPassUs"
+                    name="pass_us"
+                    className="form-control"
+                    value={editFormData.pass_us}
+                    onChange={handleEditChange}
+                    placeholder="Dejar en blanco para no cambiar"
+                  />
+                </div>
+                <div className="mb-3 form-check">
+                  <input
+                    type="checkbox"
+                    id="editPremium"
+                    name="premium"
+                    checked={editFormData.premium}
+                    onChange={handleEditChange}
+                    className="form-check-input"
+                  />
+                  <label htmlFor="editPremium" className="form-check-label">
+                    ¿Premium?
+                  </label>
+                </div>
+                <button type="submit" className="btn btn-secondary">
+                  Guardar Cambios
+                </button>
+              </>
+            )}
+          </form>
+        </div>
       )}
-    </form>
-  </div>
-)}
+
       {/* Panel Eliminar Cliente */}
       {activePanel === "delete" && (
         <div className="border p-3 mt-3">
