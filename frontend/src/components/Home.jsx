@@ -437,9 +437,7 @@ if (centro && poligonoNombre) {
     // Agregar la capa predeterminada
     osmLayer.addTo(map);
 
-    // Función para agregar control de "Volver al KML"
-    // Función para agregar control de "Volver al KML" (con icono de casa)
-    // Función para agregar control de "Volver al KML"
+
     // Función para agregar control de "Volver al KML" (con icono de casa)
     const addKmlHomeControl = () => {
       const kmlHomeControl = L.control({ position: "topright" });
@@ -484,214 +482,515 @@ if (centro && poligonoNombre) {
 
       return kmlHomeControl;
     };
-    // Función para agregar control de ubicación (versión mejorada)
-    const addLocationControl = () => {
-      const handleLocate = async () => {
-        // 1. Verificar si el navegador soporta geolocalización
-        if (!navigator.geolocation) {
-          alert("ERROR: Tu navegador no soporta geolocalización");
-          return;
-        }
+// Función mejorada para agregar control de ubicación
+const addLocationControl = () => {
+  // Función principal para manejar la geolocalización
+  const handleLocate = async () => {
+    // 1. Verificar soporte de geolocalización
+    if (!navigator.geolocation) {
+      showGeolocationError({
+        code: 0,
+        message: "Geolocalización no soportada por tu navegador"
+      });
+      return;
+    }
 
-        // 2. Mostrar indicador de carga
-        const loadingIndicator = L.DomUtil.create(
-          "div",
-          "location-loading-indicator"
-        );
-        loadingIndicator.innerHTML = `
-          <div style="
-            background: white;
-            padding: 8px 12px;
-            border-radius: 4px;
-            box-shadow: 0 0 8px rgba(0,0,0,0.1);
-            display: flex;
-            align-items: center;
-            font-size: 14px;
-          ">
-            <div class="spinner-border spinner-border-sm text-primary" role="status" style="margin-right: 8px;"></div>
-            Buscando tu ubicación...
-          </div>
-        `;
-        loadingIndicator.style.position = "absolute";
-        loadingIndicator.style.bottom = "20px";
-        loadingIndicator.style.left = "50%";
-        loadingIndicator.style.transform = "translateX(-50%)";
-        loadingIndicator.style.zIndex = "1000";
-        map.getContainer().appendChild(loadingIndicator);
+    // 2. Mostrar indicador de carga mejorado
+    const loadingIndicator = createLoadingIndicator();
+    map.getContainer().appendChild(loadingIndicator);
 
+    try {
+      // 3. Verificar permisos (mejorado para más navegadores)
+      let permissionGranted = true;
+      
+      if (navigator.permissions?.query) {
         try {
-          fixed - top;
-          // 3. Verificar permisos de geolocalización
-          const permissionStatus = await navigator.permissions?.query({
-            name: "geolocation",
-          });
-
-          if (permissionStatus?.state === "denied") {
+          const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+          if (permissionStatus.state === 'denied') {
+            permissionGranted = false;
             showPermissionInstructions();
-            return;
           }
-
-          // 4. Obtener ubicación con opciones mejoradas
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              // Eliminar indicador de carga
-              map.getContainer().removeChild(loadingIndicator);
-
-              const { latitude, longitude, accuracy } = position.coords;
-              const userLatLng = [latitude, longitude];
-
-              console.log("Ubicación obtenida:", latitude, longitude);
-
-              // Centrar mapa con animación
-              map.flyTo(userLatLng, 16, {
-                duration: 1,
-                easeLinearity: 0.25,
-              });
-
-              // Limpiar marcadores previos
-              map.eachLayer((layer) => {
-                if (
-                  layer instanceof L.Marker ||
-                  (layer instanceof L.Circle &&
-                    layer.options.fillColor === "#30f")
-                ) {
-                  map.removeLayer(layer);
-                }
-              });
-
-              // Añadir marcador con estilo mejorado
-              const marker = L.marker(userLatLng, {
-                icon: L.divIcon({
-                  className: "location-marker",
-                  html: '<div style="background-color:#4285F4;border-radius:50%;width:20px;height:20px;border:3px solid white;box-shadow:0 0 5px rgba(0,0,0,0.3)"></div>',
-                  iconSize: [26, 26],
-                  iconAnchor: [13, 13],
-                }),
-              }).addTo(map);
-
-              marker.bindPopup("<b>Tu ubicación actual</b>").openPopup();
-
-              // Añadir círculo de precisión si es relevante
-              if (accuracy && accuracy < 1000) {
-                L.circle(userLatLng, {
-                  radius: accuracy,
-                  fillColor: "#4285F4",
-                  fillOpacity: 0.2,
-                  color: "#4285F4",
-                  weight: 1,
-                }).addTo(map);
-              }
-            },
-            (error) => {
-              // Eliminar indicador de carga
-              map.getContainer().removeChild(loadingIndicator);
-              handleGeolocationError(error);
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 30000, // Aumentado timeout para mejorar la obtención de la ubicación
-              maximumAge: 0,
-            }
-          );
-        } catch (error) {
-          map.getContainer().removeChild(loadingIndicator);
-          console.error("Error al verificar permisos:", error);
-          alert("Error al verificar los permisos de ubicación");
+        } catch (e) {
+          console.log("API de permisos no disponible en este navegador");
         }
-      };
+      }
 
-      // Función para mostrar instrucciones de permisos
-      const showPermissionInstructions = () => {
-        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        const instructions = isIOS
-          ? "1. Ve a Ajustes > Privacidad > Ubicación\n2. Selecciona Safari\n3. Elige 'Mientras uso la app'\n4. Recarga esta página"
-          : "1. Abre Configuración del navegador\n2. Ve a Configuración del sitio > Ubicación\n3. Habilita los permisos\n4. Recarga la página";
+      if (!permissionGranted) {
+        map.getContainer().removeChild(loadingIndicator);
+        return;
+      }
 
-        alert(`🔍 Permiso de ubicación requerido\n\n${instructions}`);
-      };
+      // 4. Obtener ubicación con opciones mejoradas
+      navigator.geolocation.getCurrentPosition(
+        (position) => handleGeolocationSuccess(position, loadingIndicator),
+        (error) => handleGeolocationError(error, loadingIndicator),
+        {
+          enableHighAccuracy: true,
+          timeout: 15000, // 15 segundos es más razonable
+          maximumAge: 0
+        }
+      );
+    } catch (error) {
+      console.error("Error inesperado:", error);
+      map.getContainer().removeChild(loadingIndicator);
+      showGeolocationError({
+        code: 0,
+        message: "Error inesperado al obtener la ubicación"
+      });
+    }
+  };
 
-      // Función para manejar errores
-      const handleGeolocationError = (error) => {
-        const errorMessages = {
-          1: "Permiso denegado. Por favor habilita la ubicación en ajustes.",
-          2: "No se pudo obtener la ubicación (GPS apagado o sin señal).",
-          3: "Tiempo de espera agotado. ¿Estás en un área con poca cobertura?",
-        };
+  // Función para crear indicador de carga
+  const createLoadingIndicator = () => {
+    const indicator = L.DomUtil.create("div", "location-loading-indicator");
+    indicator.innerHTML = `
+      <div style="
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        min-width: 200px;
+      ">
+        <div style="
+          border: 2px solid rgba(255,255,255,0.3);
+          border-radius: 50%;
+          border-top: 2px solid white;
+          width: 16px;
+          height: 16px;
+          animation: spin 1s linear infinite;
+          margin-right: 12px;
+        "></div>
+        Buscando tu ubicación...
+      </div>
+    `;
+    indicator.style.position = "absolute";
+    indicator.style.bottom = "30px";
+    indicator.style.left = "50%";
+    indicator.style.transform = "translateX(-50%)";
+    indicator.style.zIndex = "1000";
+    
+    // Agregar animación CSS
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    indicator.appendChild(style);
+    
+    return indicator;
+  };
 
-        const errorDiv = L.DomUtil.create("div", "location-error-message");
-        errorDiv.innerHTML = `
+  // Manejar éxito en geolocalización
+  const handleGeolocationSuccess = (position, loadingIndicator) => {
+    // Eliminar indicador de carga
+    if (loadingIndicator.parentNode) {
+      map.getContainer().removeChild(loadingIndicator);
+    }
+
+    const { latitude, longitude, accuracy } = position.coords;
+    const userLatLng = [latitude, longitude];
+    console.log("Ubicación obtenida:", latitude, longitude, "Precisión:", accuracy, "metros");
+
+    // Centrar mapa con animación mejorada
+    map.flyTo(userLatLng, 16, {
+      duration: 0.75,
+      easeLinearity: 0.1,
+    });
+
+    // Limpiar marcadores previos de ubicación
+    clearPreviousLocationMarkers();
+
+    // Añadir marcador con estilo mejorado y efecto de pulso
+    const marker = L.marker(userLatLng, {
+      icon: L.divIcon({
+        className: "location-marker",
+        html: `
           <div style="
-            background: #ff4444;
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 250px;
+            position: relative;
+            width: 26px;
+            height: 26px;
           ">
-            <strong>❌ ${
-              errorMessages[error.code] || "Error desconocido"
-            }</strong>
-            <div style="margin-top: 8px;">
-              <button style="
-                background: white;
-                color: #ff4444;
-                border: none;
-                padding: 4px 8px;
-                border-radius: 3px;
-                font-size: 12px;
-                width: 100%;
-              ">Reintentar</button>
-            </div>
+            <div style="
+              background-color: #4285F4;
+              border-radius: 50%;
+              width: 100%;
+              height: 100%;
+              border: 3px solid white;
+              box-shadow: 0 0 5px rgba(0,0,0,0.3);
+              position: relative;
+              z-index: 2;
+            "></div>
+            <div style="
+              position: absolute;
+              top: -10px;
+              left: -10px;
+              width: 46px;
+              height: 46px;
+              border-radius: 50%;
+              background-color: rgba(66, 133, 244, 0.3);
+              animation: pulse 2s infinite;
+              z-index: 1;
+            "></div>
           </div>
-        `;
+        `,
+        iconSize: [46, 46],
+        iconAnchor: [23, 23],
+      }),
+    }).addTo(map);
 
-        errorDiv.style.position = "absolute";
-        errorDiv.style.bottom = "20px";
-        errorDiv.style.left = "50%";
-        errorDiv.style.transform = "translateX(-50%)";
-        errorDiv.style.zIndex = "1000";
+    // Popup mejorado
+    marker.bindPopup(`
+      <div style="font-size: 14px;">
+        <b style="color: #4285F4;">Tu ubicación actual</b>
+        <div style="margin-top: 6px;">
+          <div>Lat: ${latitude.toFixed(6)}</div>
+          <div>Lng: ${longitude.toFixed(6)}</div>
+          ${accuracy ? `<div>Precisión: ~${Math.round(accuracy)} metros</div>` : ''}
+        </div>
+      </div>
+    `).openPopup();
 
-        const button = errorDiv.querySelector("button");
-        button.onclick = () => {
-          map.getContainer().removeChild(errorDiv);
-          handleLocate();
-        };
+    // Añadir círculo de precisión si es relevante
+    if (accuracy && accuracy < 500) { // Solo mostrar para precisiones menores a 500m
+      L.circle(userLatLng, {
+        radius: accuracy,
+        fillColor: "#4285F4",
+        fillOpacity: 0.15,
+        color: "#4285F4",
+        weight: 1,
+        dashArray: "5, 5",
+      }).addTo(map);
+    }
+  };
 
-        map.getContainer().appendChild(errorDiv);
-        setTimeout(() => {
-          if (errorDiv.parentNode) {
-            map.getContainer().removeChild(errorDiv);
-          }
-        }, 10000);
-      };
+  // Limpiar marcadores previos de ubicación
+  const clearPreviousLocationMarkers = () => {
+    map.eachLayer((layer) => {
+      if (layer instanceof L.Marker && layer.options.icon?.options?.className === 'location-marker') {
+        map.removeLayer(layer);
+      }
+      if (layer instanceof L.Circle && layer.options.fillColor === "#4285F4") {
+        map.removeLayer(layer);
+      }
+    });
+  };
 
-      // Crear control de ubicación con icono SVG
-      const locationControl = L.control({ position: "topright" });
-      locationControl.onAdd = () => {
-        const div = L.DomUtil.create("div", "leaflet-bar leaflet-control");
-        div.innerHTML = `
-          <button style="
-            background: white;
-            border: 2px solid rgba(0,0,0,0.2);
-            border-radius: 4px;
-            width: 34px;
-            height: 34px;
+  // Función mejorada para mostrar instrucciones de permisos
+  const showPermissionInstructions = () => {
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isChrome = /Chrome/i.test(navigator.userAgent);
+    const isFirefox = /Firefox/i.test(navigator.userAgent);
+    const isSafari = /Safari/i.test(navigator.userAgent) && !isChrome;
+
+    let instructions = '';
+    let icon = '📍';
+    
+    if (isIOS) {
+      icon = '';
+      instructions = `
+        <ol style="margin: 10px 0; padding-left: 20px;">
+          <li>Abre la app <b>Ajustes</b> en tu dispositivo</li>
+          <li>Desplázate y selecciona <b>Safari</b></li>
+          <li>Toca <b>Ubicación</b></li>
+          <li>Selecciona <b>"Preguntar"</b> o <b>"Permitir"</b></li>
+          <li>Vuelve a esta página y recarga</li>
+        </ol>
+      `;
+    } else if (isAndroid) {
+      icon = '🤖';
+      instructions = `
+        <ol style="margin: 10px 0; padding-left: 20px;">
+          <li>Abre <b>Configuración</b> en tu dispositivo</li>
+          <li>Ve a <b>Aplicaciones</b> o <b>Apps</b></li>
+          <li>Busca tu navegador (Chrome, etc.)</li>
+          <li>Toca <b>Permisos</b></li>
+          <li>Habilita <b>Ubicación</b></li>
+          <li>Vuelve a esta página y recarga</li>
+        </ol>
+      `;
+    } else {
+      icon = '💻';
+      const browserName = isChrome ? 'Chrome' : isFirefox ? 'Firefox' : isSafari ? 'Safari' : 'tu navegador';
+      
+      instructions = `
+        <ol style="margin: 10px 0; padding-left: 20px;">
+          <li>Haz clic en el icono de <b>candado</b> en la barra de direcciones</li>
+          <li>Selecciona <b>Configuración del sitio</b> o <b>Permisos</b></li>
+          <li>Busca la opción <b>Ubicación</b></li>
+          <li>Cambia a <b>Permitir</b></li>
+          <li>Recarga la página</li>
+        </ol>
+        <div style="font-size: 12px; margin-top: 10px; color: #666;">
+          En ${browserName}, también puedes encontrar esta opción en la configuración del navegador.
+        </div>
+      `;
+    }
+
+    // Crear modal con instrucciones
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+    `;
+    
+    modal.innerHTML = `
+      <div style="
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        max-width: 500px;
+        width: 100%;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      ">
+        <div style="
+          font-size: 24px;
+          margin-bottom: 15px;
+          display: flex;
+          align-items: center;
+          color: #4285F4;
+        ">
+          <span style="margin-right: 10px;">${icon}</span>
+          <span>Permiso de ubicación requerido</span>
+        </div>
+        
+        <div style="
+          background: #f8f9fa;
+          border-radius: 6px;
+          padding: 15px;
+          margin-bottom: 20px;
+        ">
+          ${instructions}
+        </div>
+        
+        <button style="
+          background: #4285F4;
+          color: white;
+          border: none;
+          padding: 12px;
+          border-radius: 6px;
+          font-weight: bold;
+          cursor: pointer;
+          width: 100%;
+          font-size: 16px;
+          transition: background 0.2s;
+        " onmouseover="this.style.background='#3367d6'" 
+         onmouseout="this.style.background='#4285F4'">
+          Entendido, voy a configurarlo
+        </button>
+      </div>
+    `;
+    
+    modal.querySelector('button').addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
+    
+    document.body.appendChild(modal);
+  };
+
+  // Función mejorada para manejar errores
+  const handleGeolocationError = (error, loadingIndicator) => {
+    // Eliminar indicador de carga si existe
+    if (loadingIndicator && loadingIndicator.parentNode) {
+      map.getContainer().removeChild(loadingIndicator);
+    }
+    
+    console.error("Error de geolocalización:", error);
+    
+    const errorDetails = {
+      1: {
+        title: "Permiso denegado",
+        message: "Debes habilitar los permisos de ubicación para usar esta función.",
+        action: "Configurar permisos"
+      },
+      2: {
+        title: "Ubicación no disponible",
+        message: "No se pudo obtener tu ubicación. Verifica que el GPS esté activado.",
+        action: "Reintentar"
+      },
+      3: {
+        title: "Tiempo agotado",
+        message: "La solicitud de ubicación tardó demasiado. ¿Estás en un área con poca cobertura?",
+        action: "Reintentar"
+      },
+      default: {
+        title: "Error desconocido",
+        message: "Ocurrió un problema al obtener tu ubicación.",
+        action: "Reintentar"
+      }
+    };
+    
+    const { title, message, action } = errorDetails[error.code] || errorDetails.default;
+    
+    // Mostrar notificación de error en el mapa
+    const errorNotification = L.control({ position: 'bottomcenter' });
+    
+    errorNotification.onAdd = () => {
+      const div = L.DomUtil.create('div', 'location-error-notification');
+      div.innerHTML = `
+        <div style="
+          background: #ff4444;
+          color: white;
+          padding: 15px;
+          border-radius: 8px;
+          box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+          max-width: 280px;
+          text-align: center;
+        ">
+          <div style="
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-          " title="Mi ubicación">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#4285F4">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-          </button>
-        `;
-        div.onclick = handleLocate;
-        return div;
-      };
-
-      return locationControl;
+          ">
+            <span style="margin-right: 8px;">❌</span>
+            <span>${title}</span>
+          </div>
+          <div style="font-size: 14px; margin-bottom: 12px;">${message}</div>
+          <div style="display: flex; gap: 8px;">
+            <button style="
+              flex: 1;
+              background: white;
+              color: #ff4444;
+              border: none;
+              padding: 8px;
+              border-radius: 4px;
+              font-weight: bold;
+              cursor: pointer;
+              transition: background 0.2s;
+            " onmouseover="this.style.background='#f1f1f1'" 
+             onmouseout="this.style.background='white'">
+              ${action}
+            </button>
+            ${error.code === 1 ? `
+            <button style="
+              flex: 1;
+              background: transparent;
+              color: white;
+              border: 1px solid white;
+              padding: 8px;
+              border-radius: 4px;
+              font-weight: bold;
+              cursor: pointer;
+              transition: background 0.2s;
+            " onmouseover="this.style.background='rgba(255,255,255,0.1)'" 
+             onmouseout="this.style.background='transparent'">
+              Ayuda
+            </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      
+      // Configurar acciones de los botones
+      const buttons = div.querySelectorAll('button');
+      buttons[0].addEventListener('click', () => {
+        if (error.code === 1) {
+          showPermissionInstructions();
+        } else {
+          handleLocate();
+        }
+        map.removeControl(errorNotification);
+      });
+      
+      if (buttons[1]) {
+        buttons[1].addEventListener('click', () => {
+          showPermissionInstructions();
+          map.removeControl(errorNotification);
+        });
+      }
+      
+      return div;
     };
+    
+    errorNotification.addTo(map);
+    
+    // Auto-eliminar después de 15 segundos
+    setTimeout(() => {
+      if (map.hasControl(errorNotification)) {
+        map.removeControl(errorNotification);
+      }
+    }, 15000);
+  };
 
+  // Crear control de ubicación con mejoras UX
+  const locationControl = L.control({ position: "topright" });
+  
+  locationControl.onAdd = () => {
+    const div = L.DomUtil.create("div", "leaflet-bar leaflet-control");
+    div.style.cursor = "pointer";
+    
+    // Botón con efectos hover y active
+    div.innerHTML = `
+      <button style="
+        background: white;
+        border: 2px solid rgba(0,0,0,0.2);
+        border-radius: 5px;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        outline: none;
+      " title="Centrar en mi ubicación" aria-label="Mi ubicación">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="#4285F4">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </button>
+    `;
+    
+    const button = div.querySelector('button');
+    
+    // Efectos de interacción
+    button.addEventListener('mouseenter', () => {
+      button.style.background = '#f8f9fa';
+      button.style.borderColor = 'rgba(0,0,0,0.3)';
+    });
+    
+    button.addEventListener('mouseleave', () => {
+      button.style.background = 'white';
+      button.style.borderColor = 'rgba(0,0,0,0.2)';
+    });
+    
+    button.addEventListener('mousedown', () => {
+      button.style.transform = 'scale(0.95)';
+      button.style.boxShadow = 'inset 0 1px 3px rgba(0,0,0,0.1)';
+    });
+    
+    button.addEventListener('mouseup', () => {
+      button.style.transform = '';
+      button.style.boxShadow = '';
+    });
+    
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleLocate();
+    });
+    
+    return div;
+  };
+
+  return locationControl;
+};
     // Función para agregar control de capas personalizado
     // Función para agregar control de capas (con icono de capas)
     const addLayersControl = () => {
