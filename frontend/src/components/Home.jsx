@@ -47,8 +47,7 @@ const Home = () => {
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
 
-  const apiUrl = "https://appproducotres-backend.onrender.com/"
-
+  const apiUrl = "https://appproducotres-backend.onrender.com/";
 
   //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
@@ -77,6 +76,10 @@ const Home = () => {
   };
 
   const handleShowEliminarModal = () => {
+    if (!productorSeleccionado) {
+      alert("Por favor seleccione un productor primero");
+      return;
+    }
     setShowEliminarModal(true);
   };
 
@@ -1238,11 +1241,19 @@ const Home = () => {
                 <button
                   type="button"
                   className="btn-close"
-                  onClick={() => setShowClientesModal(false)}
+                  onClick={() => {
+                    setShowClientesModal(false); // Cierra el modal
+                    window.location.reload(); // Recarga la página
+                  }}
                 ></button>
               </div>
               <div className="modal-body">
-                <Clientes onClose={() => setShowClientesModal(false)} />
+                <Clientes
+                  onClose={() => {
+                    setShowClientesModal(false); // Cierra el modal
+                    window.location.reload(); // Recarga la página
+                  }}
+                />
               </div>
             </div>
           </div>

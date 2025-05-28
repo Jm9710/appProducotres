@@ -34,7 +34,7 @@ const CargarKml = ({ productorId, onClose }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMensaje("Archivo KML cargado con éxito.");
+        alert("Archivo KML cargado con éxito.");
         setGeojsonData(data.geojson); // Obtén el GeoJSON para usarlo en el mapa
         // Recargar la página principal (Home)
         window.location.reload(); // Recarga la página

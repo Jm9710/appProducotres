@@ -55,6 +55,8 @@ const Login = () => {
       }
     } catch (err) {
       setError("Error de conexión con el servidor");
+    }finally{
+      setLoading(false); // Asegúrate de que el loading se desactive al final
     }
   };
   

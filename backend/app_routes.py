@@ -87,6 +87,20 @@ def obtener_usuarios():
     usuarios_serializados = [usuario.serialize() for usuario in usuarios]
     return jsonify(usuarios_serializados), 200
 
+@routes.route('/api/usuario/<int:id_usuario>', methods=['DELETE'])
+def eliminar_usuario(id_usuario):
+    usuario = Usuario.query.get(id_usuario)
+    if not usuario:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+    
+    try:
+        db.session.delete(usuario)
+        db.session.commit()
+        return jsonify({"msg": "Usuario eliminado exitosamente"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al eliminar el usuario", "error": str(e)}), 500
+
 # Endpoint para editar usuarios
 @routes.route('/api/usuario/<int:id_usuario>', methods=['PUT'])
 def actualizar_usuario(id_usuario):
@@ -159,6 +173,8 @@ def actualizar_tipo_usuario(id_tipo):
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": "Error al actualizar el tipo de usuario"}), 500
+    
+
 
 @routes.route('/api/login', methods=['POST'])
 def login():

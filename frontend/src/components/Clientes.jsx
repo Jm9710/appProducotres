@@ -157,25 +157,22 @@ const Clientes = () => {
   const handleDeleteSubmit = async (e) => {
     e.preventDefault();
     if (!deleteFormData.id_usuario) {
-      setMessage({
-        type: "error",
-        text: "Seleccione un cliente para eliminar",
-      });
+      setMessage({ type: "error", text: "Seleccione un cliente para eliminar" });
       return;
     }
-
+  
     if (!window.confirm("¿Está seguro que desea eliminar este cliente?")) {
       return;
     }
-
+  
+    setLoading(true); // Mostrar indicador de carga
+  
     try {
       const response = await fetch(
         `${apiUrl}api/usuario/${deleteFormData.id_usuario}`,
-        {
-          method: "DELETE",
-        }
+        { method: "DELETE" }
       );
-
+  
       if (response.ok) {
         setMessage({ type: "success", text: "Cliente eliminado exitosamente" });
         setDeleteFormData({ id_usuario: "" });
@@ -193,6 +190,8 @@ const Clientes = () => {
         type: "error",
         text: "No se pudo conectar con el servidor",
       });
+    } finally {
+      setLoading(false); // Ocultar indicador de carga
     }
   };
 

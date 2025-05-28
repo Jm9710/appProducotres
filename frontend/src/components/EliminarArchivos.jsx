@@ -112,14 +112,6 @@ const EliminarArchivos = ({ productorId, onClose }) => {
             ) : archivos.length === 0 ? (
               <div className="alert alert-warning">
                 No se encontraron archivos disponibles para eliminar.
-                <div className="mt-2">
-                  <button 
-                    className="btn btn-sm btn-info"
-                    onClick={() => console.log('Archivos en estado:', archivos)}
-                  >
-                    Ver datos en consola
-                  </button>
-                </div>
               </div>
             ) : (
               <div className="list-group">
