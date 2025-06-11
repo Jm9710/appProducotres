@@ -1,12 +1,16 @@
 import os
 import boto3
 from app_config import Config
+import mimetypes
+from urllib.parse import quote
+
 
 s3 = boto3.client(
     's3',
     aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
     aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
-    region_name=Config.S3_REGION
+    region_name=Config.S3_REGION,
+    endpoint_url=f'https://s3.{Config.S3_REGION}.amazonaws.com'
 )
 
 def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
@@ -14,10 +18,22 @@ def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
         # Construir la clave del archivo con el prefijo de carpeta, si se proporciona
         if carpeta:
             nombre_archivo = f"{carpeta}/{nombre_archivo}"
-        
-        # Subir el archivo a S3
-        s3.upload_fileobj(archivo, Config.S3_BUCKET_NAME, nombre_archivo)
-        print(f"Archivo {nombre_archivo} subido exitosamente a S3")
+
+        # Detectar el Content-Type
+        content_type, _ = mimetypes.guess_type(nombre_archivo)
+        if content_type is None:
+            # Por defecto si no se detecta
+            content_type = 'application/octet-stream'
+
+        # Configurar headers extras
+        extra_args = {
+            'ContentType': content_type,
+            'ContentDisposition': f'attachment; filename="{quote(nombre_archivo.split("/")[-1])}"'  # Asegurarse de que el nombre del archivo esté codificado correctamente
+        }
+
+        # Subir el archivo con los headers
+        s3.upload_fileobj(archivo, Config.S3_BUCKET_NAME, nombre_archivo, ExtraArgs=extra_args)
+        print(f"Archivo {nombre_archivo} subido exitosamente a S3 con Content-Type {content_type}")
 
         if return_url:
             url = f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{nombre_archivo}"
@@ -31,18 +47,30 @@ def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
             return f"Error al subir archivo a S3: {e}", None
         return f"Error al subir archivo a S3: {e}"
     
-def obtener_url_presignada(carpeta_productor, archivo_nombre):
-    # Ruta completa del archivo en S3
-    ruta_archivo_s3 = f"{carpeta_productor}/{archivo_nombre}"
 
-    # Generar la URL presignada
-    presigned_url = s3.generate_presigned_url(
-        'get_object',
-        Params={'Bucket': Config.S3_BUCKET_NAME, 'Key': ruta_archivo_s3},
-        ExpiresIn=3600  # 1 hora de validez
-    )
+def generar_url_firmada(ruta_s3, expiracion=3600):
+    try:
+        content_type, _ = mimetypes.guess_type(ruta_s3)
+        if content_type is None:
+            content_type = 'application/octet-stream'
 
-    return presigned_url
+        url = s3.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={
+                'Bucket': Config.S3_BUCKET_NAME,
+                'Key': ruta_s3,
+                'ResponseContentDisposition': f'attachment; filename="{os.path.basename(ruta_s3)}"',
+                'ResponseContentType': content_type,
+            },
+            ExpiresIn=expiracion
+        )
+
+        print("URL firmada generada:", url)  # Aquí verificas la URL
+
+        return url
+    except Exception as e:
+        print(f"Error generando URL firmada: {e}")
+        return None
 
 def eliminar_archivo_de_s3(ruta_completa_s3):
     try:

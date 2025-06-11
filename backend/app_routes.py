@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_jwt_extended import create_access_token, jwt_required
 from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
-from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3
+from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3, generar_url_firmada
 from app_config import Config
 import xml.etree.ElementTree as ET
 from sqlalchemy.orm import joinedload
@@ -341,18 +341,17 @@ def listar_archivos():
 @routes.route('/api/productor/archivos', methods=['GET'])
 def obtener_archivos_por_productor():
     cod_productor = request.args.get('cod_productor')
-    categoria = request.args.get('categoria')  # Nuevo parámetro
+    categoria = request.args.get('categoria')
 
     if not cod_productor:
         return jsonify({'error': 'Productor ID no proporcionado'}), 400
     
     productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
-
     if not productor:
         return jsonify({'error': 'Productor no encontrado'}), 404
     
-    # Filtrar por tipo de archivo si se especifica categoría
     query = Archivo.query.filter_by(us_asociado=productor.id_usuario)
+    
     if categoria:
         tipo_archivo = TipoArchivo.query.filter_by(tipo=categoria).first()
         if tipo_archivo:
@@ -361,18 +360,28 @@ def obtener_archivos_por_productor():
     archivos = query.all()
 
     archivos_clasificados = {}
+
     for archivo in archivos:
         tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
         tipo_nombre = tipo_archivo.tipo if tipo_archivo else 'Desconocido'
-        if tipo_nombre not in archivos_clasificados:
-            archivos_clasificados[tipo_nombre] = []
-        archivos_clasificados[tipo_nombre].append(archivo.serialize())
+
+        # Extraer la key S3 de la ruta original almacenada
+        key_s3 = archivo.ruta_descarga.split(f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/")[-1]
+
+        # Generar URL firmada justo ahora (expiración 10 minutos por ejemplo)
+        url_firmada = generar_url_firmada(key_s3, expiracion=600)  # 600 segundos = 10 minutos
+
+        archivo_data = archivo.serialize()
+        archivo_data['ruta_descarga'] = url_firmada if url_firmada else archivo.ruta_descarga
+
+        archivos_clasificados.setdefault(tipo_nombre, []).append(archivo_data)
 
     return jsonify({
         'productor': productor.nombre,
         'cod_productor': productor.cod_productor,
         'archivos': archivos_clasificados
     }), 200
+
 
 @routes.route('/api/eliminar_archivo', methods=['DELETE'])
 def eliminar_archivo():
@@ -420,73 +429,83 @@ def eliminar_archivo():
 
 @routes.route('/api/subir_kml', methods=['POST'])
 def subir_kml():
-    print("Llegó una solicitud de subida de archivo KML.")  # Verifica que la solicitud llegó
+    print("Llegó una solicitud de subida de archivo KML.")
 
     # Verificar si los campos necesarios están presentes en la solicitud
     if 'archivo' not in request.files:
-        print("No se ha subido ningún archivo")
-        return jsonify({"msg": "No se ha subido ningún archivo"}), 400
+        print("No se ha subido ningún archivo KML.")
+        return jsonify({"msg": "No se ha subido ningún archivo KML"}), 400
     
-    archivo = request.files['archivo']
+    archivo_kml = request.files['archivo'] # Renombrado para mayor claridad
+    
     if 'productorId' not in request.form or not request.form['productorId']:
-        print("No se ha especificado el productor ID")
+        print("No se ha especificado el productor ID.")
         return jsonify({"msg": "No se ha especificado el productor ID"}), 400
 
     # Usar el productor ID como el cod_productor
     cod_productor = request.form['productorId']
-    print(f"Productor código recibido: {cod_productor}")  # Verifica que el productor_id esté siendo recibido correctamente
+    print(f"Productor código recibido: {cod_productor}")
 
     # Verificar si el archivo tiene un nombre
-    if archivo.filename == '':
-        print("No se ha seleccionado ningún archivo")
-        return jsonify({"msg": "No se ha seleccionado ningún archivo"}), 400
+    if archivo_kml.filename == '':
+        print("No se ha seleccionado ningún archivo KML.")
+        return jsonify({"msg": "No se ha seleccionado ningún archivo KML"}), 400
 
     # Generar un nombre seguro para el archivo
-    filename = secure_filename(archivo.filename)
+    filename = secure_filename(archivo_kml.filename)
 
     # Validar que el archivo sea un KML
     if not filename.lower().endswith('.kml'):
-        print("El archivo subido no es un archivo KML")
+        print("El archivo subido no es un archivo KML.")
         return jsonify({"msg": "El archivo subido no es un archivo KML"}), 400
 
     # Obtener el productor usando el cod_productor
     productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
     if not productor:
-        print("Productor no encontrado")
+        print("Productor no encontrado.")
         return jsonify({"msg": "Productor no encontrado"}), 404
-
-    # Verificar si ya existe un KML asociado a este productor
-    kml_existente = KML.query.filter_by(us_asociado=productor.id_usuario).first()
-    if kml_existente:
-        # Si ya existe un KML, eliminamos el anterior
-        print("Ya existe un KML asociado a este productor, lo eliminamos.")
-        db.session.delete(kml_existente)
-        db.session.commit()
 
     # Crear el prefijo para la "carpeta" en S3 usando el cod_productor
     ruta_s3 = f"{cod_productor}/kml/{filename}"
-    print(f"Ruta de S3 generada: {ruta_s3}")  # Verifica la ruta generada
+    print(f"Ruta de S3 generada: {ruta_s3}")
 
     # Leer el contenido del archivo para convertirlo a GeoJSON
-    kml_data = archivo.read()
-    geojson_data = kml_to_geojson(kml_data)
-    print("Conversión de KML a GeoJSON completada.")  # Verifica la conversión
+    # Es importante que `archivo_kml` esté en la posición inicial para `kml_to_geojson` y `subir_archivo_a_s3`
+    kml_data = archivo_kml.read()
+    # Una vez leído, el puntero del archivo está al final. Restablecerlo.
+    archivo_kml.seek(0) 
+    
+    geojson_data = kml_to_geojson(kml_data) # Asegúrate de que kml_to_geojson pueda tomar bytes
+    print("Conversión de KML a GeoJSON completada.")
 
-    # Subir el archivo a S3
-    archivo.seek(0)  # Restablecer el puntero del archivo antes de subirlo
-    mensaje = subir_archivo_a_s3(archivo, ruta_s3)
+    # Subir el archivo KML a S3 (el puntero ya está restablecido)
+    mensaje = subir_archivo_a_s3(archivo_kml, ruta_s3)
 
-    # Si la subida a S3 fue exitosa, guardamos la información en la base de datos
+    # Si la subida a S3 fue exitosa, guardamos/actualizamos la información en la base de datos
     if "exitosamente" in mensaje:
-        nuevo_kml = KML(
-            ruta_archivo=f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}',
-            us_asociado=productor.id_usuario  # Usar id_usuario del productor
-        )
-        db.session.add(nuevo_kml)
-        db.session.commit()
-
+        # **CAMBIO CLAVE AQUÍ:**
+        kml_existente = KML.query.filter_by(us_asociado=productor.id_usuario).first()
+        
+        if kml_existente:
+            # Si ya existe un KML, ACTUALIZAMOS su ruta y otros campos si es necesario.
+            # NO LO ELIMINAMOS. Esto preserva las relaciones con Archivos.
+            print("Ya existe un KML asociado a este productor, lo actualizamos.")
+            kml_existente.ruta_archivo = f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}'
+            # Puedes actualizar otros campos del KML si los tienes, por ejemplo:
+            # kml_existente.nombre = filename 
+        else:
+            # Si no existe, creamos un nuevo registro KML.
+            print("No existe un KML asociado, creando uno nuevo.")
+            nuevo_kml = KML(
+                ruta_archivo=f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}',
+                us_asociado=productor.id_usuario
+            )
+            db.session.add(nuevo_kml)
+            
+        db.session.commit() # Confirma los cambios (actualización o nueva creación)
+        
         return jsonify({
-            "msg": "Archivo KML cargado exitosamente",
+            "msg": "Archivo KML cargado/actualizado exitosamente",
             "geojson": geojson_data
         }), 200
     else:

@@ -97,28 +97,29 @@ const Home = () => {
 
   const fetchArchivos = async (productorId, categoria) => {
     if (!productorId) return;
-
+  
     setLoading(true);
     console.log(`Cargando archivos para el productor ${productorId}`);
-
+  
     try {
       const response = await fetch(
         `${apiUrl}api/productor/archivos?cod_productor=${productorId}`
       );
-
+  
       if (!response.ok) {
         throw new Error("Error al obtener los archivos");
       }
-
+  
       const data = await response.json();
-      console.log("Datos recibidos:", data);
-
+      console.log("Datos recibidos:", JSON.stringify(data, null, 2));
+  
       setArchivosPorCategoria(data.archivos || {});
-
+  
       if (categoria) {
         setArchivosMostrados(data.archivos[categoria] || []);
       } else {
         const todosArchivos = Object.values(data.archivos).flat();
+        console.log("Todos los archivos:", todosArchivos); // Confirmar contenido
         setArchivosMostrados(todosArchivos);
       }
     } catch (error) {
@@ -127,6 +128,7 @@ const Home = () => {
       setLoading(false);
     }
   };
+  
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     noClick: true,
@@ -251,80 +253,137 @@ const Home = () => {
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
               });
-            
+
               // Calcular el área del polígono
               let areaFormatted = "N/A";
               let centro = null;
-            
-              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+
+              if (
+                feature.geometry.type === "Polygon" ||
+                feature.geometry.type === "MultiPolygon"
+              ) {
                 const coords =
                   feature.geometry.type === "Polygon"
-                    ? feature.geometry.coordinates[0].map(([lng, lat]) => L.latLng(lat, lng))
-                    : feature.geometry.coordinates[0][0].map(([lng, lat]) => L.latLng(lat, lng));
+                    ? feature.geometry.coordinates[0].map(([lng, lat]) =>
+                        L.latLng(lat, lng)
+                      )
+                    : feature.geometry.coordinates[0][0].map(([lng, lat]) =>
+                        L.latLng(lat, lng)
+                      );
                 const area = L.GeometryUtil.geodesicArea(coords);
                 areaFormatted = (area / 10000).toFixed(2); // Convertir a hectáreas (ha)
-            
-                // Calcular el centro geométrico del polígono
+
                 centro = L.polygon(coords).getBounds().getCenter();
               }
-            
-// Agregar etiqueta en el centro del polígono
-if (centro && poligonoNombre) {
-  const etiqueta = L.marker(centro, {
-    icon: L.divIcon({
-      className: "polygon-label",
-      html: `<div class="label-container">${poligonoNombre}</div>`,
-      iconSize: [100, 30],
-      iconAnchor: [50, 15],
-    }),
-    interactive: false,
-    zIndexOffset: 1000,
-  }).addTo(mapRef.current);
-  
-  // Ocultar inicialmente
-  etiqueta.setOpacity(0);
-  
-  // Controlar visibilidad basada en el zoom
-  mapRef.current.on('zoomend', function() {
-    const currentZoom = mapRef.current.getZoom();
-    const polygonBounds = layer.getBounds();
-    const polygonSize = mapRef.current.latLngToLayerPoint(polygonBounds.getNorthEast())
-                      .subtract(mapRef.current.latLngToLayerPoint(polygonBounds.getSouthWest()));
-    
-    // Mostrar solo si estamos lo suficientemente cerca
-    const shouldShow = currentZoom >= 13 || // Zoom mínimo
-                     (polygonSize.x > 150 && polygonSize.y > 150); // Tamaño mínimo en píxeles
-    
-    etiqueta.setOpacity(shouldShow ? 1 : 0);
-  });
+
+              // Agregar etiqueta en el centro del polígono
+              if (centro && poligonoNombre) {
+                const etiqueta = L.marker(centro, {
+                  icon: L.divIcon({
+                    className: "polygon-label",
+                    html: `<div class="label-container">${poligonoNombre}</div>`,
+                    iconSize: [100, 30],
+                    iconAnchor: [50, 15],
+                  }),
+                  interactive: false,
+                  zIndexOffset: 1000,
+                }).addTo(mapRef.current);
+
+                etiqueta.setOpacity(0);
+                mapRef.current.on("zoomend", () => {
+                  const currentZoom = mapRef.current.getZoom();
+                  const polygonBounds = layer.getBounds();
+                  const polygonSize = mapRef.current
+                    .latLngToLayerPoint(polygonBounds.getNorthEast())
+                    .subtract(
+                      mapRef.current.latLngToLayerPoint(
+                        polygonBounds.getSouthWest()
+                      )
+                    );
+
+                  const shouldShow =
+                    currentZoom >= 13 ||
+                    (polygonSize.x > 150 && polygonSize.y > 150);
+
+                  etiqueta.setOpacity(shouldShow ? 1 : 0);
+                });
+              }
+
+// Crear contenido del popup dinámicamente
+const popupContainer = document.createElement("div");
+
+if (poligonoNombre) {
+  const titulo = document.createElement("b");
+  titulo.textContent = `C ${poligonoNombre}`;
+  popupContainer.appendChild(titulo);
+  popupContainer.appendChild(document.createElement("br"));
 }
-              
-            
-              // Popup simplificado (solo nombre, área y archivos)
-              let popupContent = "";
-              if (feature.properties?.name) {
-                const poligonoNombre = "C " + feature.properties.name; // Prefijo C + nombre
-                popupContent += `<b>${poligonoNombre}</b><br>`;
-              }
-              popupContent += `Área: ${areaFormatted} ha`;
-            
-              if (archivosAsociados.length > 0) {
-                popupContent += `<br>Archivos:<br><ul>`;
-                popupContent += archivosAsociados
-                  .map((archivo) => {
-                    const nombreArchivo = archivo.split("/").pop(); // Obtener el nombre del archivo
-                    const nombreAjustado = nombreArchivo.replace(/_/g, " "); // Reemplazar guiones bajos con espacios
-                    return `<li><a href="${archivo}" target="_blank" download>${nombreAjustado}</a></li>`;
-                  })
-                  .join("");
-                popupContent += `</ul>`;
-              }
-            
-              layer.bindPopup(popupContent);
+
+const areaTexto = document.createElement("span");
+areaTexto.textContent = `Área: ${areaFormatted} ha`;
+popupContainer.appendChild(areaTexto);
+
+if (archivosAsociados.length > 0) {
+  popupContainer.appendChild(document.createElement("br"));
+  const listaArchivos = document.createElement("ul");
+
+  archivosAsociados.forEach((archivoUrl) => {
+    console.log("URL usada:", archivoUrl);
+  
+    const nombreArchivo = archivoUrl.split("/").pop();
+    const nombreAjustado = nombreArchivo.replace(/_/g, " ");
+
+    const listItem = document.createElement("li");
+    const enlace = document.createElement("a");
+    enlace.textContent = nombreAjustado;
+    enlace.href = archivoUrl;
+    enlace.target = "_blank";
+    enlace.download = nombreAjustado;
+
+    enlace.addEventListener("click", (e) => {
+      e.preventDefault();
+
+      if (archivoUrl.includes("amazonaws.com")) {
+        // Abrir directo en nueva pestaña para evitar problemas con CORS o headers
+        window.open(archivoUrl, "_blank");
+        return;
+      }
+
+      // Si no es URL S3, fallback con fetch para descargar blob
+      fetch(archivoUrl)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Error al descargar el archivo: ${res.statusText}`);
+          return res.blob();
+        })
+        .then((blob) => {
+          const urlBlob = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = urlBlob;
+          a.download = nombreAjustado;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(urlBlob);
+        })
+        .catch((error) => {
+          console.error("Error al descargar el archivo desde el blob:", error);
+          alert("No se pudo descargar el archivo. Intente nuevamente.");
+        });
+    });
+
+    listItem.appendChild(enlace);
+    listaArchivos.appendChild(listItem);
+  });
+
+  popupContainer.appendChild(listaArchivos);
+}
+
+layer.bindPopup(popupContainer);
+
             },
           }).addTo(mapRef.current);
 
-          // Ajustar el mapa para que muestre el contenido del KML
+          // Ajustar el mapa para mostrar el contenido del KML
           if (mapRef.current && capa.getBounds) {
             const bounds = capa.getBounds();
             if (bounds.isValid()) {
@@ -437,7 +496,6 @@ if (centro && poligonoNombre) {
     // Agregar la capa predeterminada
     osmLayer.addTo(map);
 
-
     // Función para agregar control de "Volver al KML" (con icono de casa)
     const addKmlHomeControl = () => {
       const kmlHomeControl = L.control({ position: "topright" });
@@ -482,68 +540,70 @@ if (centro && poligonoNombre) {
 
       return kmlHomeControl;
     };
-// Función mejorada para agregar control de ubicación
-const addLocationControl = () => {
-  // Función principal para manejar la geolocalización
-  const handleLocate = async () => {
-    // 1. Verificar soporte de geolocalización
-    if (!navigator.geolocation) {
-      showGeolocationError({
-        code: 0,
-        message: "Geolocalización no soportada por tu navegador"
-      });
-      return;
-    }
+    // Función mejorada para agregar control de ubicación
+    const addLocationControl = () => {
+      // Función principal para manejar la geolocalización
+      const handleLocate = async () => {
+        // 1. Verificar soporte de geolocalización
+        if (!navigator.geolocation) {
+          showGeolocationError({
+            code: 0,
+            message: "Geolocalización no soportada por tu navegador",
+          });
+          return;
+        }
 
-    // 2. Mostrar indicador de carga mejorado
-    const loadingIndicator = createLoadingIndicator();
-    map.getContainer().appendChild(loadingIndicator);
+        // 2. Mostrar indicador de carga mejorado
+        const loadingIndicator = createLoadingIndicator();
+        map.getContainer().appendChild(loadingIndicator);
 
-    try {
-      // 3. Verificar permisos (mejorado para más navegadores)
-      let permissionGranted = true;
-      
-      if (navigator.permissions?.query) {
         try {
-          const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
-          if (permissionStatus.state === 'denied') {
-            permissionGranted = false;
-            showPermissionInstructions();
+          // 3. Verificar permisos (mejorado para más navegadores)
+          let permissionGranted = true;
+
+          if (navigator.permissions?.query) {
+            try {
+              const permissionStatus = await navigator.permissions.query({
+                name: "geolocation",
+              });
+              if (permissionStatus.state === "denied") {
+                permissionGranted = false;
+                showPermissionInstructions();
+              }
+            } catch (e) {
+              console.log("API de permisos no disponible en este navegador");
+            }
           }
-        } catch (e) {
-          console.log("API de permisos no disponible en este navegador");
+
+          if (!permissionGranted) {
+            map.getContainer().removeChild(loadingIndicator);
+            return;
+          }
+
+          // 4. Obtener ubicación con opciones mejoradas
+          navigator.geolocation.getCurrentPosition(
+            (position) => handleGeolocationSuccess(position, loadingIndicator),
+            (error) => handleGeolocationError(error, loadingIndicator),
+            {
+              enableHighAccuracy: true,
+              timeout: 15000, // 15 segundos es más razonable
+              maximumAge: 0,
+            }
+          );
+        } catch (error) {
+          console.error("Error inesperado:", error);
+          map.getContainer().removeChild(loadingIndicator);
+          showGeolocationError({
+            code: 0,
+            message: "Error inesperado al obtener la ubicación",
+          });
         }
-      }
+      };
 
-      if (!permissionGranted) {
-        map.getContainer().removeChild(loadingIndicator);
-        return;
-      }
-
-      // 4. Obtener ubicación con opciones mejoradas
-      navigator.geolocation.getCurrentPosition(
-        (position) => handleGeolocationSuccess(position, loadingIndicator),
-        (error) => handleGeolocationError(error, loadingIndicator),
-        {
-          enableHighAccuracy: true,
-          timeout: 15000, // 15 segundos es más razonable
-          maximumAge: 0
-        }
-      );
-    } catch (error) {
-      console.error("Error inesperado:", error);
-      map.getContainer().removeChild(loadingIndicator);
-      showGeolocationError({
-        code: 0,
-        message: "Error inesperado al obtener la ubicación"
-      });
-    }
-  };
-
-  // Función para crear indicador de carga
-  const createLoadingIndicator = () => {
-    const indicator = L.DomUtil.create("div", "location-loading-indicator");
-    indicator.innerHTML = `
+      // Función para crear indicador de carga
+      const createLoadingIndicator = () => {
+        const indicator = L.DomUtil.create("div", "location-loading-indicator");
+        indicator.innerHTML = `
       <div style="
         background: rgba(0, 0, 0, 0.7);
         color: white;
@@ -567,50 +627,57 @@ const addLocationControl = () => {
         Buscando tu ubicación...
       </div>
     `;
-    indicator.style.position = "absolute";
-    indicator.style.bottom = "30px";
-    indicator.style.left = "50%";
-    indicator.style.transform = "translateX(-50%)";
-    indicator.style.zIndex = "1000";
-    
-    // Agregar animación CSS
-    const style = document.createElement('style');
-    style.textContent = `
+        indicator.style.position = "absolute";
+        indicator.style.bottom = "30px";
+        indicator.style.left = "50%";
+        indicator.style.transform = "translateX(-50%)";
+        indicator.style.zIndex = "1000";
+
+        // Agregar animación CSS
+        const style = document.createElement("style");
+        style.textContent = `
       @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
       }
     `;
-    indicator.appendChild(style);
-    
-    return indicator;
-  };
+        indicator.appendChild(style);
 
-  // Manejar éxito en geolocalización
-  const handleGeolocationSuccess = (position, loadingIndicator) => {
-    // Eliminar indicador de carga
-    if (loadingIndicator.parentNode) {
-      map.getContainer().removeChild(loadingIndicator);
-    }
+        return indicator;
+      };
 
-    const { latitude, longitude, accuracy } = position.coords;
-    const userLatLng = [latitude, longitude];
-    console.log("Ubicación obtenida:", latitude, longitude, "Precisión:", accuracy, "metros");
+      // Manejar éxito en geolocalización
+      const handleGeolocationSuccess = (position, loadingIndicator) => {
+        // Eliminar indicador de carga
+        if (loadingIndicator.parentNode) {
+          map.getContainer().removeChild(loadingIndicator);
+        }
 
-    // Centrar mapa con animación mejorada
-    map.flyTo(userLatLng, 16, {
-      duration: 0.75,
-      easeLinearity: 0.1,
-    });
+        const { latitude, longitude, accuracy } = position.coords;
+        const userLatLng = [latitude, longitude];
+        console.log(
+          "Ubicación obtenida:",
+          latitude,
+          longitude,
+          "Precisión:",
+          accuracy,
+          "metros"
+        );
 
-    // Limpiar marcadores previos de ubicación
-    clearPreviousLocationMarkers();
+        // Centrar mapa con animación mejorada
+        map.flyTo(userLatLng, 16, {
+          duration: 0.75,
+          easeLinearity: 0.1,
+        });
 
-    // Añadir marcador con estilo mejorado y efecto de pulso
-    const marker = L.marker(userLatLng, {
-      icon: L.divIcon({
-        className: "location-marker",
-        html: `
+        // Limpiar marcadores previos de ubicación
+        clearPreviousLocationMarkers();
+
+        // Añadir marcador con estilo mejorado y efecto de pulso
+        const marker = L.marker(userLatLng, {
+          icon: L.divIcon({
+            className: "location-marker",
+            html: `
           <div style="
             position: relative;
             width: 26px;
@@ -639,62 +706,77 @@ const addLocationControl = () => {
             "></div>
           </div>
         `,
-        iconSize: [46, 46],
-        iconAnchor: [23, 23],
-      }),
-    }).addTo(map);
+            iconSize: [46, 46],
+            iconAnchor: [23, 23],
+          }),
+        }).addTo(map);
 
-    // Popup mejorado
-    marker.bindPopup(`
+        // Popup mejorado
+        marker
+          .bindPopup(
+            `
       <div style="font-size: 14px;">
         <b style="color: #4285F4;">Tu ubicación actual</b>
         <div style="margin-top: 6px;">
           <div>Lat: ${latitude.toFixed(6)}</div>
           <div>Lng: ${longitude.toFixed(6)}</div>
-          ${accuracy ? `<div>Precisión: ~${Math.round(accuracy)} metros</div>` : ''}
+          ${
+            accuracy
+              ? `<div>Precisión: ~${Math.round(accuracy)} metros</div>`
+              : ""
+          }
         </div>
       </div>
-    `).openPopup();
+    `
+          )
+          .openPopup();
 
-    // Añadir círculo de precisión si es relevante
-    if (accuracy && accuracy < 500) { // Solo mostrar para precisiones menores a 500m
-      L.circle(userLatLng, {
-        radius: accuracy,
-        fillColor: "#4285F4",
-        fillOpacity: 0.15,
-        color: "#4285F4",
-        weight: 1,
-        dashArray: "5, 5",
-      }).addTo(map);
-    }
-  };
+        // Añadir círculo de precisión si es relevante
+        if (accuracy && accuracy < 500) {
+          // Solo mostrar para precisiones menores a 500m
+          L.circle(userLatLng, {
+            radius: accuracy,
+            fillColor: "#4285F4",
+            fillOpacity: 0.15,
+            color: "#4285F4",
+            weight: 1,
+            dashArray: "5, 5",
+          }).addTo(map);
+        }
+      };
 
-  // Limpiar marcadores previos de ubicación
-  const clearPreviousLocationMarkers = () => {
-    map.eachLayer((layer) => {
-      if (layer instanceof L.Marker && layer.options.icon?.options?.className === 'location-marker') {
-        map.removeLayer(layer);
-      }
-      if (layer instanceof L.Circle && layer.options.fillColor === "#4285F4") {
-        map.removeLayer(layer);
-      }
-    });
-  };
+      // Limpiar marcadores previos de ubicación
+      const clearPreviousLocationMarkers = () => {
+        map.eachLayer((layer) => {
+          if (
+            layer instanceof L.Marker &&
+            layer.options.icon?.options?.className === "location-marker"
+          ) {
+            map.removeLayer(layer);
+          }
+          if (
+            layer instanceof L.Circle &&
+            layer.options.fillColor === "#4285F4"
+          ) {
+            map.removeLayer(layer);
+          }
+        });
+      };
 
-  // Función mejorada para mostrar instrucciones de permisos
-  const showPermissionInstructions = () => {
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const isChrome = /Chrome/i.test(navigator.userAgent);
-    const isFirefox = /Firefox/i.test(navigator.userAgent);
-    const isSafari = /Safari/i.test(navigator.userAgent) && !isChrome;
+      // Función mejorada para mostrar instrucciones de permisos
+      const showPermissionInstructions = () => {
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isChrome = /Chrome/i.test(navigator.userAgent);
+        const isFirefox = /Firefox/i.test(navigator.userAgent);
+        const isSafari = /Safari/i.test(navigator.userAgent) && !isChrome;
 
-    let instructions = '';
-    let icon = '📍';
-    
-    if (isIOS) {
-      icon = '';
-      instructions = `
+        let instructions = "";
+        let icon = "📍";
+
+        if (isIOS) {
+          icon = "";
+          instructions = `
         <ol style="margin: 10px 0; padding-left: 20px;">
           <li>Abre la app <b>Ajustes</b> en tu dispositivo</li>
           <li>Desplázate y selecciona <b>Safari</b></li>
@@ -703,9 +785,9 @@ const addLocationControl = () => {
           <li>Vuelve a esta página y recarga</li>
         </ol>
       `;
-    } else if (isAndroid) {
-      icon = '🤖';
-      instructions = `
+        } else if (isAndroid) {
+          icon = "🤖";
+          instructions = `
         <ol style="margin: 10px 0; padding-left: 20px;">
           <li>Abre <b>Configuración</b> en tu dispositivo</li>
           <li>Ve a <b>Aplicaciones</b> o <b>Apps</b></li>
@@ -715,11 +797,17 @@ const addLocationControl = () => {
           <li>Vuelve a esta página y recarga</li>
         </ol>
       `;
-    } else {
-      icon = '💻';
-      const browserName = isChrome ? 'Chrome' : isFirefox ? 'Firefox' : isSafari ? 'Safari' : 'tu navegador';
-      
-      instructions = `
+        } else {
+          icon = "💻";
+          const browserName = isChrome
+            ? "Chrome"
+            : isFirefox
+            ? "Firefox"
+            : isSafari
+            ? "Safari"
+            : "tu navegador";
+
+          instructions = `
         <ol style="margin: 10px 0; padding-left: 20px;">
           <li>Haz clic en el icono de <b>candado</b> en la barra de direcciones</li>
           <li>Selecciona <b>Configuración del sitio</b> o <b>Permisos</b></li>
@@ -731,11 +819,11 @@ const addLocationControl = () => {
           En ${browserName}, también puedes encontrar esta opción en la configuración del navegador.
         </div>
       `;
-    }
+        }
 
-    // Crear modal con instrucciones
-    const modal = document.createElement('div');
-    modal.style.cssText = `
+        // Crear modal con instrucciones
+        const modal = document.createElement("div");
+        modal.style.cssText = `
       position: fixed;
       top: 0;
       left: 0;
@@ -748,8 +836,8 @@ const addLocationControl = () => {
       z-index: 9999;
       padding: 20px;
     `;
-    
-    modal.innerHTML = `
+
+        modal.innerHTML = `
       <div style="
         background: white;
         border-radius: 10px;
@@ -795,54 +883,58 @@ const addLocationControl = () => {
         </button>
       </div>
     `;
-    
-    modal.querySelector('button').addEventListener('click', () => {
-      document.body.removeChild(modal);
-    });
-    
-    document.body.appendChild(modal);
-  };
 
-  // Función mejorada para manejar errores
-  const handleGeolocationError = (error, loadingIndicator) => {
-    // Eliminar indicador de carga si existe
-    if (loadingIndicator && loadingIndicator.parentNode) {
-      map.getContainer().removeChild(loadingIndicator);
-    }
-    
-    console.error("Error de geolocalización:", error);
-    
-    const errorDetails = {
-      1: {
-        title: "Permiso denegado",
-        message: "Debes habilitar los permisos de ubicación para usar esta función.",
-        action: "Configurar permisos"
-      },
-      2: {
-        title: "Ubicación no disponible",
-        message: "No se pudo obtener tu ubicación. Verifica que el GPS esté activado.",
-        action: "Reintentar"
-      },
-      3: {
-        title: "Tiempo agotado",
-        message: "La solicitud de ubicación tardó demasiado. ¿Estás en un área con poca cobertura?",
-        action: "Reintentar"
-      },
-      default: {
-        title: "Error desconocido",
-        message: "Ocurrió un problema al obtener tu ubicación.",
-        action: "Reintentar"
-      }
-    };
-    
-    const { title, message, action } = errorDetails[error.code] || errorDetails.default;
-    
-    // Mostrar notificación de error en el mapa
-    const errorNotification = L.control({ position: 'bottomcenter' });
-    
-    errorNotification.onAdd = () => {
-      const div = L.DomUtil.create('div', 'location-error-notification');
-      div.innerHTML = `
+        modal.querySelector("button").addEventListener("click", () => {
+          document.body.removeChild(modal);
+        });
+
+        document.body.appendChild(modal);
+      };
+
+      // Función mejorada para manejar errores
+      const handleGeolocationError = (error, loadingIndicator) => {
+        // Eliminar indicador de carga si existe
+        if (loadingIndicator && loadingIndicator.parentNode) {
+          map.getContainer().removeChild(loadingIndicator);
+        }
+
+        console.error("Error de geolocalización:", error);
+
+        const errorDetails = {
+          1: {
+            title: "Permiso denegado",
+            message:
+              "Debes habilitar los permisos de ubicación para usar esta función.",
+            action: "Configurar permisos",
+          },
+          2: {
+            title: "Ubicación no disponible",
+            message:
+              "No se pudo obtener tu ubicación. Verifica que el GPS esté activado.",
+            action: "Reintentar",
+          },
+          3: {
+            title: "Tiempo agotado",
+            message:
+              "La solicitud de ubicación tardó demasiado. ¿Estás en un área con poca cobertura?",
+            action: "Reintentar",
+          },
+          default: {
+            title: "Error desconocido",
+            message: "Ocurrió un problema al obtener tu ubicación.",
+            action: "Reintentar",
+          },
+        };
+
+        const { title, message, action } =
+          errorDetails[error.code] || errorDetails.default;
+
+        // Mostrar notificación de error en el mapa
+        const errorNotification = L.control({ position: "bottomcenter" });
+
+        errorNotification.onAdd = () => {
+          const div = L.DomUtil.create("div", "location-error-notification");
+          div.innerHTML = `
         <div style="
           background: #ff4444;
           color: white;
@@ -879,7 +971,9 @@ const addLocationControl = () => {
              onmouseout="this.style.background='white'">
               ${action}
             </button>
-            ${error.code === 1 ? `
+            ${
+              error.code === 1
+                ? `
             <button style="
               flex: 1;
               background: transparent;
@@ -894,51 +988,53 @@ const addLocationControl = () => {
              onmouseout="this.style.background='transparent'">
               Ayuda
             </button>
-            ` : ''}
+            `
+                : ""
+            }
           </div>
         </div>
       `;
-      
-      // Configurar acciones de los botones
-      const buttons = div.querySelectorAll('button');
-      buttons[0].addEventListener('click', () => {
-        if (error.code === 1) {
-          showPermissionInstructions();
-        } else {
-          handleLocate();
-        }
-        map.removeControl(errorNotification);
-      });
-      
-      if (buttons[1]) {
-        buttons[1].addEventListener('click', () => {
-          showPermissionInstructions();
-          map.removeControl(errorNotification);
-        });
-      }
-      
-      return div;
-    };
-    
-    errorNotification.addTo(map);
-    
-    // Auto-eliminar después de 15 segundos
-    setTimeout(() => {
-      if (map.hasControl(errorNotification)) {
-        map.removeControl(errorNotification);
-      }
-    }, 15000);
-  };
 
-  // Crear control de ubicación con mejoras UX
-  const locationControl = L.control({ position: "topright" });
-  
-  locationControl.onAdd = () => {
-    const div = L.DomUtil.create("div", "leaflet-bar leaflet-control");
-    div.style.cursor = "pointer";
-    
-    // Botón con efectos hover y active
-    div.innerHTML = `
+          // Configurar acciones de los botones
+          const buttons = div.querySelectorAll("button");
+          buttons[0].addEventListener("click", () => {
+            if (error.code === 1) {
+              showPermissionInstructions();
+            } else {
+              handleLocate();
+            }
+            map.removeControl(errorNotification);
+          });
+
+          if (buttons[1]) {
+            buttons[1].addEventListener("click", () => {
+              showPermissionInstructions();
+              map.removeControl(errorNotification);
+            });
+          }
+
+          return div;
+        };
+
+        errorNotification.addTo(map);
+
+        // Auto-eliminar después de 15 segundos
+        setTimeout(() => {
+          if (map.hasControl(errorNotification)) {
+            map.removeControl(errorNotification);
+          }
+        }, 15000);
+      };
+
+      // Crear control de ubicación con mejoras UX
+      const locationControl = L.control({ position: "topright" });
+
+      locationControl.onAdd = () => {
+        const div = L.DomUtil.create("div", "leaflet-bar leaflet-control");
+        div.style.cursor = "pointer";
+
+        // Botón con efectos hover y active
+        div.innerHTML = `
       <button style="
         background: white;
         border: 2px solid rgba(0,0,0,0.2);
@@ -957,40 +1053,40 @@ const addLocationControl = () => {
         </svg>
       </button>
     `;
-    
-    const button = div.querySelector('button');
-    
-    // Efectos de interacción
-    button.addEventListener('mouseenter', () => {
-      button.style.background = '#f8f9fa';
-      button.style.borderColor = 'rgba(0,0,0,0.3)';
-    });
-    
-    button.addEventListener('mouseleave', () => {
-      button.style.background = 'white';
-      button.style.borderColor = 'rgba(0,0,0,0.2)';
-    });
-    
-    button.addEventListener('mousedown', () => {
-      button.style.transform = 'scale(0.95)';
-      button.style.boxShadow = 'inset 0 1px 3px rgba(0,0,0,0.1)';
-    });
-    
-    button.addEventListener('mouseup', () => {
-      button.style.transform = '';
-      button.style.boxShadow = '';
-    });
-    
-    button.addEventListener('click', (e) => {
-      e.stopPropagation();
-      handleLocate();
-    });
-    
-    return div;
-  };
 
-  return locationControl;
-};
+        const button = div.querySelector("button");
+
+        // Efectos de interacción
+        button.addEventListener("mouseenter", () => {
+          button.style.background = "#f8f9fa";
+          button.style.borderColor = "rgba(0,0,0,0.3)";
+        });
+
+        button.addEventListener("mouseleave", () => {
+          button.style.background = "white";
+          button.style.borderColor = "rgba(0,0,0,0.2)";
+        });
+
+        button.addEventListener("mousedown", () => {
+          button.style.transform = "scale(0.95)";
+          button.style.boxShadow = "inset 0 1px 3px rgba(0,0,0,0.1)";
+        });
+
+        button.addEventListener("mouseup", () => {
+          button.style.transform = "";
+          button.style.boxShadow = "";
+        });
+
+        button.addEventListener("click", (e) => {
+          e.stopPropagation();
+          handleLocate();
+        });
+
+        return div;
+      };
+
+      return locationControl;
+    };
     // Función para agregar control de capas personalizado
     // Función para agregar control de capas (con icono de capas)
     const addLayersControl = () => {
