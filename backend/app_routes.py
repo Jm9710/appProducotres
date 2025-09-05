@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_jwt_extended import create_access_token, jwt_required
@@ -7,6 +7,13 @@ from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3, generar_url_f
 from app_config import Config
 import xml.etree.ElementTree as ET
 from sqlalchemy.orm import joinedload
+import io
+from dropbox_service import (
+    listar_archivos as dbx_listar_archivos,
+    subir_archivo as dbx_subir_archivo,
+    descargar_archivo as dbx_descargar_archivo,
+    mover_archivo as dbx_mover_archivo,
+)
 
 
 
@@ -556,11 +563,291 @@ def obtener_kml_por_productor():
         'kmls': [kml.serialize() for kml in kmls]
     }), 200
 
+from flask import Blueprint, jsonify, request, send_file
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from flask_jwt_extended import create_access_token, jwt_required
+from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
+from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3, generar_url_firmada
+from app_config import Config
+import xml.etree.ElementTree as ET
+from sqlalchemy.orm import joinedload
+import io
+
+# 🔧 Import de Dropbox con alias (para no chocar con listar_archivos de S3)
+from dropbox_service import (
+    listar_archivos as dbx_listar_archivos,
+    subir_archivo as dbx_subir_archivo,
+    descargar_archivo as dbx_descargar_archivo,
+    mover_archivo as dbx_mover_archivo,
+)
 
 
+def kml_to_geojson(kml_data):
+    """Convert KML data to GeoJSON format."""
+    kml_tree = ET.ElementTree(ET.fromstring(kml_data))
+    root = kml_tree.getroot()
+
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+
+    geojson_features = []
+    for placemark in root.findall('.//kml:Placemark', ns):
+        geometry = placemark.find('.//kml:Polygon//kml:coordinates', ns)
+        if geometry is not None:
+            coordinates = geometry.text.strip().split(' ')
+            coords = [[float(coord.split(',')[0]), float(coord.split(',')[1])] for coord in coordinates]
+            feature = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': [coords]
+                },
+                'properties': {
+                    'name': placemark.find('.//kml:name', ns).text if placemark.find('.//kml:name', ns) is not None else 'Unnamed'
+                }
+            }
+            geojson_features.append(feature)
+
+    return {
+        'type': 'FeatureCollection',
+        'features': geojson_features
+    }
 
 
+# Crear un Blueprint para las rutas
+routes = Blueprint('routes', __name__)
 
-    
+# ------------------ PING ------------------
+@routes.route('/')
+def home():
+    return "¡Servidor Flask funcionando!"
 
+# ------------------ USUARIOS ------------------
+@routes.route('/api/usuario', methods=['POST'])
+def crear_usuario():
+    data = request.get_json()
+    if not data or not data.get('nom_us') or not data.get('pass_us') or not data.get('nombre'):
+        return jsonify({"msg": "Faltan datos"}), 400
 
+    tipo_usuario = TipoUsuario.query.get(data['tipo_us'])
+    if not tipo_usuario:
+        return jsonify({"msg": "Tipo de usuario no válido"}), 400
+
+    hashed_password = generate_password_hash(data['pass_us'], method='pbkdf2:sha256')
+
+    nuevo_usuario = Usuario(
+        nom_us=data['nom_us'],
+        pass_us=hashed_password,
+        nombre=data['nombre'],
+        cod_productor=data.get('cod_productor'),
+        tipo_us=tipo_usuario.id_tipo,
+        premium=data.get('premium', False)
+    )
+
+    try:
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+        return jsonify(nuevo_usuario.serialize()), 201
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear el usuario"}), 500
+
+@routes.route('/api/usuarios', methods=['GET'])
+def obtener_usuarios():
+    usuarios = Usuario.query.all()
+    usuarios_serializados = [usuario.serialize() for usuario in usuarios]
+    return jsonify(usuarios_serializados), 200
+
+@routes.route('/api/usuario/<int:id_usuario>', methods=['DELETE'])
+def eliminar_usuario(id_usuario):
+    usuario = Usuario.query.get(id_usuario)
+    if not usuario:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+
+    try:
+        db.session.delete(usuario)
+        db.session.commit()
+        return jsonify({"msg": "Usuario eliminado exitosamente"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al eliminar el usuario", "error": str(e)}), 500
+
+@routes.route('/api/usuario/<int:id_usuario>', methods=['PUT'])
+def actualizar_usuario(id_usuario):
+    data = request.get_json()
+    if not data:
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    usuario = Usuario.query.get(id_usuario)
+    if not usuario:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+
+    if 'pass_us' in data and data['pass_us']:
+        data['pass_us'] = generate_password_hash(data['pass_us'], method='pbkdf2:sha256')
+
+    for key in data:
+        if hasattr(usuario, key) and key != 'id_usuario':
+            setattr(usuario, key, data[key])
+
+    try:
+        db.session.commit()
+        return jsonify(usuario.serialize()), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al actualizar el usuario", "error": str(e)}), 500
+
+# ------------------ TIPOS DE USUARIO ------------------
+@routes.route('/api/tipo_usuario', methods=['POST'])
+def crear_tipo_usuario():
+    data = request.get_json()
+    if not data or not data.get('tipo'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    nuevo_tipo_usuario = TipoUsuario(tipo=data['tipo'])
+    try:
+        db.session.add(nuevo_tipo_usuario)
+        db.session.commit()
+        return jsonify(nuevo_tipo_usuario.serialize()), 201
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear el tipo de usuario"}), 500
+
+@routes.route('/api/tipo_usuario', methods=['GET'])
+def obtener_tipos_usuario():
+    tipos_usuario = TipoUsuario.query.all()
+    return jsonify([tipo.serialize() for tipo in tipos_usuario]), 200
+
+@routes.route('/api/tipo_usuario/<int:id_tipo>', methods=['PUT'])
+def actualizar_tipo_usuario(id_tipo):
+    tipo_usuario = TipoUsuario.query.get(id_tipo)
+    if not tipo_usuario:
+        return jsonify({"msg": "Tipo de usuario no encontrado"}), 404
+
+    data = request.get_json()
+    if not data or not data.get('tipo'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    try:
+        tipo_usuario.tipo = data['tipo']
+        db.session.commit()
+        return jsonify(tipo_usuario.serialize()), 200
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al actualizar el tipo de usuario"}), 500
+
+# ------------------ LOGIN ------------------
+@routes.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data or not data.get("user") or not data.get("password"):
+        return jsonify({"error": "Faltan datos"}), 400
+
+    usuario = Usuario.query.filter_by(nom_us=data["user"]).first()
+    if not usuario:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+    if not check_password_hash(usuario.pass_us, data["password"]):
+        return jsonify({"error": "Contraseña incorrecta"}), 401
+
+    token = create_access_token(identity=usuario.id_usuario)
+    tipo_usuario = usuario.tipo_usuario.tipo
+
+    return jsonify({
+        "token": token,
+        "tipo_usuario": tipo_usuario,
+        "nom_us": usuario.nom_us,
+        "nombre": usuario.nombre,
+        "cod_productor": usuario.cod_productor,
+    }), 200
+
+# ------------------ TIPOS DE ARCHIVO ------------------
+@routes.route('/api/tipo_archivo', methods=['POST'])
+def crear_tipo_archivo():
+    data = request.get_json()
+    if not data or not data.get('tipo'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    nuevo_tipo_archivo = TipoArchivo(tipo=data['tipo'])
+    try:
+        db.session.add(nuevo_tipo_archivo)
+        db.session.commit()
+        return jsonify(nuevo_tipo_archivo.serialize()), 201
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear el tipo de archivo"}), 500
+
+@routes.route('/api/tipo_archivo', methods=['GET'])
+def obtener_tipos_archivo():
+    tipos_archivo = TipoArchivo.query.all()
+    return jsonify([tipo.serialize() for tipo in tipos_archivo]), 200
+
+# ------------------ ARCHIVOS S3 ------------------
+@routes.route('/api/archivos', methods=['GET'])
+def listar_archivos_s3():
+    productor_id = request.args.get('productorId')
+    if not productor_id:
+        return jsonify({'error': 'Productor ID no proporcionado'}), 400
+
+    productor = Usuario.query.filter_by(cod_productor=productor_id).first()
+    if not productor:
+        return jsonify({'error': 'Productor no encontrado'}), 404
+
+    archivos = Archivo.query.filter_by(us_asociado=productor.id_usuario).all()
+    resultado = []
+    for archivo in archivos:
+        tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
+        archivo_data = archivo.serialize()
+        archivo_data['tipo_archivo'] = tipo_archivo.tipo if tipo_archivo else None
+        resultado.append(archivo_data)
+
+    return jsonify(resultado), 200
+
+# ------------------ DROPBOX ------------------
+@routes.route("/list", methods=["GET"])
+def list_files():
+    folder = request.args.get("folder", "")
+    data = dbx_listar_archivos(folder)
+    return jsonify(data), (200 if isinstance(data, list) else 400)
+
+@routes.route("/upload", methods=["POST"])
+def upload_file():
+    if "file" not in request.files or "path" not in request.form:
+        return jsonify({"error": "Falta file o path"}), 400
+    f = request.files["file"]
+    path = request.form["path"]
+    res = dbx_subir_archivo(f, path)
+    return jsonify(res), (200 if "msg" in res else 400)
+
+@routes.route("/download", methods=["GET"])
+def download_file():
+    path = request.args.get("path")
+    if not path:
+        return jsonify({"error": "Falta path"}), 400
+    blob, filename = dbx_descargar_archivo(path)
+    if blob is None:
+        return jsonify({"error": filename}), 400
+    return send_file(io.BytesIO(blob), as_attachment=True, download_name=filename)
+
+@routes.route("/move", methods=["POST"])
+def move_file():
+    data = request.get_json() or {}
+    if "from" not in data or "to" not in data:
+        return jsonify({"error": "Faltan from/to"}), 400
+    res = dbx_mover_archivo(data["from"], data["to"])
+    return jsonify(res), (200 if "msg" in res else 400)
+
+@routes.route("/consume", methods=["GET"])
+def consume_file():
+    path = request.args.get("path")
+    dest = request.args.get("dest")
+    if not path or not dest:
+        return jsonify({"error": "Faltan path/dest"}), 400
+
+    blob, filename = dbx_descargar_archivo(path)
+    if blob is None:
+        return jsonify({"error": filename}), 400
+
+    res = dbx_mover_archivo(path, dest)
+    if "error" in res:
+        return jsonify(res), 400
+
+    return send_file(io.BytesIO(blob), as_attachment=True, download_name=filename)

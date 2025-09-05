@@ -16,6 +16,7 @@ import EliminarArchivo from "./EliminarArchivos";
 import CargarKml from "./CargarKml";
 import VerInformes from "./VerInformes";
 import Clientes from "./Clientes";
+import DescargarPuntos from "./descargaPuntos";
 import { useDropzone } from "react-dropzone";
 import Select from "react-select";
 
@@ -37,6 +38,7 @@ const Home = () => {
   const [showCargarKmlModal, setShowCargarKmlModal] = useState(false);
   const [showInformesModal, setShowInformesModal] = useState(false);
   const [showClientesModal, setShowClientesModal] = useState(false);
+  const [showDescargaPuntosModal, setShowDescargaPuntosModal] = useState(false);
   const [kmlLayers, setKmlLayers] = useState([]);
   const [cargandoKml, setCargandoKml] = useState(false);
   const [kmlData, setKmlData] = useState(null);
@@ -46,11 +48,26 @@ const Home = () => {
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
+  const [puntosCount, setPuntosCount] = useState(0);
 
   const apiUrl = "https://appproducotres-backend.onrender.com/";
 
+  //const apiUrl = "http://192.168.1.66:3001/";
+
   //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
+
+// Carpeta de puntos (la misma de DescargaPuntos modo "drone")
+// === arriba, cerca de apiUrl ===
+const AVAIL_FOLDERS = ["/00004/Nubes", "/00004/CSV"]; // Drone + CSV
+
+const isFolder = (it) =>
+  String(it?.type || it?.[".tag"] || it?.tag || "")
+    .toLowerCase()
+    .includes("folder");
+
+
+
   const handleCargarArchivosClick = () => {
     if (!productorSeleccionado) {
       alert("Por favor seleccione un productor primero");
@@ -95,26 +112,30 @@ const Home = () => {
     setShowClientesModal(true);
   };
 
+  const handleShowDescargarPuntosModal = () => {
+    setShowDescargaPuntosModal(true);
+  };
+
   const fetchArchivos = async (productorId, categoria) => {
     if (!productorId) return;
-  
+
     setLoading(true);
     console.log(`Cargando archivos para el productor ${productorId}`);
-  
+
     try {
       const response = await fetch(
         `${apiUrl}api/productor/archivos?cod_productor=${productorId}`
       );
-  
+
       if (!response.ok) {
         throw new Error("Error al obtener los archivos");
       }
-  
+
       const data = await response.json();
       console.log("Datos recibidos:", JSON.stringify(data, null, 2));
-  
+
       setArchivosPorCategoria(data.archivos || {});
-  
+
       if (categoria) {
         setArchivosMostrados(data.archivos[categoria] || []);
       } else {
@@ -128,7 +149,6 @@ const Home = () => {
       setLoading(false);
     }
   };
-  
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     noClick: true,
@@ -190,6 +210,52 @@ const Home = () => {
 
     fetchTiposArchivo();
   }, []);
+
+// === reemplaza tu useEffect de fetch/polling del contador ===
+useEffect(() => {
+  const base = apiUrl.replace(/\/$/, "");
+  let timerId;
+
+  const fetchCount = async () => {
+    try {
+      const results = await Promise.all(
+        AVAIL_FOLDERS.map((folder) =>
+          fetch(`${base}/list?folder=${encodeURIComponent(folder)}`)
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => [])
+        )
+      );
+
+      const total = results.reduce((sum, arr) => {
+        const files = (Array.isArray(arr) ? arr : []).filter((it) => !isFolder(it));
+        return sum + files.length;
+      }, 0);
+
+      setPuntosCount(total);
+    } catch (e) {
+      console.error("Error contando puntos:", e);
+      setPuntosCount(0);
+    }
+  };
+
+  fetchCount();                    // primera vez
+  timerId = setInterval(fetchCount, 5000); // cada 10s
+
+  const onVis = () => {
+    clearInterval(timerId);
+    if (!document.hidden) {
+      fetchCount();
+      timerId = setInterval(fetchCount, 5000);
+    }
+  };
+  document.addEventListener("visibilitychange", onVis);
+
+  return () => {
+    clearInterval(timerId);
+    document.removeEventListener("visibilitychange", onVis);
+  };
+}, [apiUrl]);
+
 
   useEffect(() => {
     const nombre = localStorage.getItem("nombre");
@@ -309,77 +375,84 @@ const Home = () => {
                 });
               }
 
-// Crear contenido del popup dinámicamente
-const popupContainer = document.createElement("div");
+              // Crear contenido del popup dinámicamente
+              const popupContainer = document.createElement("div");
 
-if (poligonoNombre) {
-  const titulo = document.createElement("b");
-  titulo.textContent = `C ${poligonoNombre}`;
-  popupContainer.appendChild(titulo);
-  popupContainer.appendChild(document.createElement("br"));
-}
+              if (poligonoNombre) {
+                const titulo = document.createElement("b");
+                titulo.textContent = `C ${poligonoNombre}`;
+                popupContainer.appendChild(titulo);
+                popupContainer.appendChild(document.createElement("br"));
+              }
 
-const areaTexto = document.createElement("span");
-areaTexto.textContent = `Área: ${areaFormatted} ha`;
-popupContainer.appendChild(areaTexto);
+              const areaTexto = document.createElement("span");
+              areaTexto.textContent = `Área: ${areaFormatted} ha`;
+              popupContainer.appendChild(areaTexto);
 
-if (archivosAsociados.length > 0) {
-  popupContainer.appendChild(document.createElement("br"));
-  const listaArchivos = document.createElement("ul");
+              if (archivosAsociados.length > 0) {
+                popupContainer.appendChild(document.createElement("br"));
+                const listaArchivos = document.createElement("ul");
 
-  archivosAsociados.forEach((archivoUrl) => {
-    console.log("URL usada:", archivoUrl);
-  
-    const nombreArchivo = archivoUrl.split("/").pop();
-    const nombreAjustado = nombreArchivo.replace(/_/g, " ");
+                archivosAsociados.forEach((archivoUrl) => {
+                  console.log("URL usada:", archivoUrl);
 
-    const listItem = document.createElement("li");
-    const enlace = document.createElement("a");
-    enlace.textContent = nombreAjustado;
-    enlace.href = archivoUrl;
-    enlace.target = "_blank";
-    enlace.download = nombreAjustado;
+                  const nombreArchivo = archivoUrl.split("/").pop();
+                  const nombreAjustado = nombreArchivo.replace(/_/g, " ");
 
-    enlace.addEventListener("click", (e) => {
-      e.preventDefault();
+                  const listItem = document.createElement("li");
+                  const enlace = document.createElement("a");
+                  enlace.textContent = nombreAjustado;
+                  enlace.href = archivoUrl;
+                  enlace.target = "_blank";
+                  enlace.download = nombreAjustado;
 
-      if (archivoUrl.includes("amazonaws.com")) {
-        // Abrir directo en nueva pestaña para evitar problemas con CORS o headers
-        window.open(archivoUrl, "_blank");
-        return;
-      }
+                  enlace.addEventListener("click", (e) => {
+                    e.preventDefault();
 
-      // Si no es URL S3, fallback con fetch para descargar blob
-      fetch(archivoUrl)
-        .then((res) => {
-          if (!res.ok) throw new Error(`Error al descargar el archivo: ${res.statusText}`);
-          return res.blob();
-        })
-        .then((blob) => {
-          const urlBlob = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = urlBlob;
-          a.download = nombreAjustado;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(urlBlob);
-        })
-        .catch((error) => {
-          console.error("Error al descargar el archivo desde el blob:", error);
-          alert("No se pudo descargar el archivo. Intente nuevamente.");
-        });
-    });
+                    if (archivoUrl.includes("amazonaws.com")) {
+                      // Abrir directo en nueva pestaña para evitar problemas con CORS o headers
+                      window.open(archivoUrl, "_blank");
+                      return;
+                    }
 
-    listItem.appendChild(enlace);
-    listaArchivos.appendChild(listItem);
-  });
+                    // Si no es URL S3, fallback con fetch para descargar blob
+                    fetch(archivoUrl)
+                      .then((res) => {
+                        if (!res.ok)
+                          throw new Error(
+                            `Error al descargar el archivo: ${res.statusText}`
+                          );
+                        return res.blob();
+                      })
+                      .then((blob) => {
+                        const urlBlob = window.URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = urlBlob;
+                        a.download = nombreAjustado;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        window.URL.revokeObjectURL(urlBlob);
+                      })
+                      .catch((error) => {
+                        console.error(
+                          "Error al descargar el archivo desde el blob:",
+                          error
+                        );
+                        alert(
+                          "No se pudo descargar el archivo. Intente nuevamente."
+                        );
+                      });
+                  });
 
-  popupContainer.appendChild(listaArchivos);
-}
+                  listItem.appendChild(enlace);
+                  listaArchivos.appendChild(listItem);
+                });
 
-layer.bindPopup(popupContainer);
+                popupContainer.appendChild(listaArchivos);
+              }
 
+              layer.bindPopup(popupContainer);
             },
           }).addTo(mapRef.current);
 
@@ -1405,6 +1478,10 @@ layer.bindPopup(popupContainer);
           >
             Clientes
           </button>
+<button className="btn btn-primary me-2" onClick={handleShowDescargarPuntosModal}>
+  Descarga de puntos {puntosCount > 0 && `(${puntosCount})`}
+</button>
+
         </div>
         <Select
           className="basic-single"
@@ -1611,7 +1688,7 @@ layer.bindPopup(popupContainer);
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           tabIndex="-1"
         >
-          <div className="modal-dialog">
+          <div className="modal-dialog modal">
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Cargar Archivo KML</h5>
@@ -1681,6 +1758,39 @@ layer.bindPopup(popupContainer);
             </div>
           </div>
         </div>
+      )}
+
+      {showDescargaPuntosModal && (
+        <>
+          <div
+            className="modal fade show"
+            style={{ display: "block", backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+          >
+            <div className="modal-dialog modal-xl">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Descarga de Puntos</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowDescargaPuntosModal(false);
+                      window.location.reload();
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <DescargarPuntos
+                    onClose={() => {
+                      setShowDescargaPuntosModal(false);
+                      window.location.reload();
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

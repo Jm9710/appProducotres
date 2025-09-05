@@ -37,12 +37,16 @@ const Login = () => {
         localStorage.setItem("user", user);
         localStorage.setItem("nombre", data.nombre);
         localStorage.setItem("cod_productor", data.cod_productor);  // Guardamos el cod_productor
+        localStorage.setItem("tipo_usuario", data.tipo_usuario); // <-- NUEVO
   
         if (data.tipo_usuario === "Oficina" || data.tipo_usuario === "Admin") {
           navigate("/home");
         }
         if (data.tipo_usuario === "Productor") {
           navigate("/home-cliente");
+        }
+        if (data.tipo_usuario === "Relevador") {
+          navigate("/home-relevadores")
         }
       } else {
         if (response.status === 404) {
