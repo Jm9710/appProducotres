@@ -1,5 +1,6 @@
 backend/.env
 backend/config.py
+backend/venv
 
 # Logs
 logs
