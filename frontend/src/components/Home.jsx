@@ -1688,7 +1688,7 @@ useEffect(() => {
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           tabIndex="-1"
         >
-          <div className="modal-dialog modal">
+          <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Cargar Archivo KML</h5>
