@@ -213,49 +213,60 @@ const isFolder = (it) =>
 
 // === reemplaza tu useEffect de fetch/polling del contador ===
 useEffect(() => {
-  const base = apiUrl.replace(/\/$/, "");
-  let timerId;
+  const folders = AVAIL_FOLDERS.join(",");
+  const es = new EventSource(`${apiUrl}/events?folders=${encodeURIComponent(folders)}`, { withCredentials: false });
 
-  const fetchCount = async () => {
+  let closed = false;
+
+  const onMessage = (ev) => {
+    if (!ev.data) return;
     try {
-      const results = await Promise.all(
-        AVAIL_FOLDERS.map((folder) =>
-          fetch(`${base}/list?folder=${encodeURIComponent(folder)}`)
-            .then((r) => (r.ok ? r.json() : []))
-            .catch(() => [])
-        )
-      );
+      const msg = JSON.parse(ev.data); // { type, folder, name, size, ts }
+      if (msg.type === "file_created") {
+        // 1) Mostrá notificación
+        // 2) Si querés, refrescá el conteo UNA sola vez:
+        fetchCountOnce(); // tu función existente pero sin intervalos agresivos
+      }
+    } catch {}
+  };
 
-      const total = results.reduce((sum, arr) => {
-        const files = (Array.isArray(arr) ? arr : []).filter((it) => !isFolder(it));
-        return sum + files.length;
-      }, 0);
+  const onOpen = () => console.log("SSE abierto");
+  const onError = () => {
+    console.warn("SSE error; reintentará solo");
+    // EventSource reintenta solo; no hagas reconexión manual salvo que quieras backoff custom
+  };
 
+  es.addEventListener("message", onMessage);
+  es.addEventListener("open", onOpen);
+  es.addEventListener("error", onError);
+
+  const fetchCountOnce = async () => {
+    // Podés usar la opción /list_counts que te pasé en el mensaje anterior
+    try {
+      const r = await fetch(`${apiUrl}/list_counts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folders: AVAIL_FOLDERS }),
+      });
+      if (!r.ok) return;
+      const counts = await r.json();
+      const total = Object.values(counts).reduce((a,b)=>a+(b||0),0);
       setPuntosCount(total);
-    } catch (e) {
-      console.error("Error contando puntos:", e);
-      setPuntosCount(0);
-    }
+    } catch {}
   };
 
-  fetchCount();                    // primera vez
-  timerId = setInterval(fetchCount, 5000); // cada 10s
-
-  const onVis = () => {
-    clearInterval(timerId);
-    if (!document.hidden) {
-      fetchCount();
-      timerId = setInterval(fetchCount, 5000);
-    }
-  };
-  document.addEventListener("visibilitychange", onVis);
+  document.addEventListener("visibilitychange", () => {
+    // opcional: cuando vuelve visible, hacé un sync por las dudas
+    if (!document.hidden) fetchCountOnce();
+  });
 
   return () => {
-    clearInterval(timerId);
-    document.removeEventListener("visibilitychange", onVis);
+    if (!closed) {
+      es.close();
+      closed = true;
+    }
   };
 }, [apiUrl]);
-
 
   useEffect(() => {
     const nombre = localStorage.getItem("nombre");
