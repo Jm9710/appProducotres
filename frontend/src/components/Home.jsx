@@ -52,21 +52,19 @@ const Home = () => {
 
   const apiUrl = "https://appproducotres-backend.onrender.com/";
 
- //onst apiUrl = "http://192.168.1.66:3001/";
+  //onst apiUrl = "http://192.168.1.66:3001/";
 
   //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.1.65:3001/";
 
-// Carpeta de puntos (la misma de DescargaPuntos modo "drone")
-// === arriba, cerca de apiUrl ===
-const AVAIL_FOLDERS = ["/00004/Nubes", "/00004/CSV"]; // Drone + CSV
+  // Carpeta de puntos (la misma de DescargaPuntos modo "drone")
+  // === arriba, cerca de apiUrl ===
+  const AVAIL_FOLDERS = ["/00004/Nubes", "/00004/CSV"]; // Drone + CSV
 
-const isFolder = (it) =>
-  String(it?.type || it?.[".tag"] || it?.tag || "")
-    .toLowerCase()
-    .includes("folder");
-
-
+  const isFolder = (it) =>
+    String(it?.type || it?.[".tag"] || it?.tag || "")
+      .toLowerCase()
+      .includes("folder");
 
   const handleCargarArchivosClick = () => {
     if (!productorSeleccionado) {
@@ -211,62 +209,65 @@ const isFolder = (it) =>
     fetchTiposArchivo();
   }, []);
 
-// === reemplaza tu useEffect de fetch/polling del contador ===
-useEffect(() => {
-  const folders = AVAIL_FOLDERS.join(",");
-  const es = new EventSource(`${apiUrl}/events?folders=${encodeURIComponent(folders)}`, { withCredentials: false });
+  // === reemplaza tu useEffect de fetch/polling del contador ===
+  useEffect(() => {
+    const folders = AVAIL_FOLDERS.join(",");
+    const es = new EventSource(
+      `${apiUrl}/events?folders=${encodeURIComponent(folders)}`,
+      { withCredentials: false }
+    );
 
-  let closed = false;
+    let closed = false;
 
-  const onMessage = (ev) => {
-    if (!ev.data) return;
-    try {
-      const msg = JSON.parse(ev.data); // { type, folder, name, size, ts }
-      if (msg.type === "file_created") {
-        // 1) Mostrá notificación
-        // 2) Si querés, refrescá el conteo UNA sola vez:
-        fetchCountOnce(); // tu función existente pero sin intervalos agresivos
+    const onMessage = (ev) => {
+      if (!ev.data) return;
+      try {
+        const msg = JSON.parse(ev.data); // { type, folder, name, size, ts }
+        if (msg.type === "file_created") {
+          // 1) Mostrá notificación
+          // 2) Si querés, refrescá el conteo UNA sola vez:
+          fetchCountOnce(); // tu función existente pero sin intervalos agresivos
+        }
+      } catch {}
+    };
+
+    const onOpen = () => console.log("SSE abierto");
+    const onError = () => {
+      console.warn("SSE error; reintentará solo");
+      // EventSource reintenta solo; no hagas reconexión manual salvo que quieras backoff custom
+    };
+
+    es.addEventListener("message", onMessage);
+    es.addEventListener("open", onOpen);
+    es.addEventListener("error", onError);
+
+    const fetchCountOnce = async () => {
+      // Podés usar la opción /list_counts que te pasé en el mensaje anterior
+      try {
+        const r = await fetch(`${apiUrl}/list_counts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folders: AVAIL_FOLDERS }),
+        });
+        if (!r.ok) return;
+        const counts = await r.json();
+        const total = Object.values(counts).reduce((a, b) => a + (b || 0), 0);
+        setPuntosCount(total);
+      } catch {}
+    };
+
+    document.addEventListener("visibilitychange", () => {
+      // opcional: cuando vuelve visible, hacé un sync por las dudas
+      if (!document.hidden) fetchCountOnce();
+    });
+
+    return () => {
+      if (!closed) {
+        es.close();
+        closed = true;
       }
-    } catch {}
-  };
-
-  const onOpen = () => console.log("SSE abierto");
-  const onError = () => {
-    console.warn("SSE error; reintentará solo");
-    // EventSource reintenta solo; no hagas reconexión manual salvo que quieras backoff custom
-  };
-
-  es.addEventListener("message", onMessage);
-  es.addEventListener("open", onOpen);
-  es.addEventListener("error", onError);
-
-  const fetchCountOnce = async () => {
-    // Podés usar la opción /list_counts que te pasé en el mensaje anterior
-    try {
-      const r = await fetch(`${apiUrl}/list_counts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folders: AVAIL_FOLDERS }),
-      });
-      if (!r.ok) return;
-      const counts = await r.json();
-      const total = Object.values(counts).reduce((a,b)=>a+(b||0),0);
-      setPuntosCount(total);
-    } catch {}
-  };
-
-  document.addEventListener("visibilitychange", () => {
-    // opcional: cuando vuelve visible, hacé un sync por las dudas
-    if (!document.hidden) fetchCountOnce();
-  });
-
-  return () => {
-    if (!closed) {
-      es.close();
-      closed = true;
-    }
-  };
-}, [apiUrl]);
+    };
+  }, [apiUrl]);
 
   useEffect(() => {
     const nombre = localStorage.getItem("nombre");
@@ -387,7 +388,7 @@ useEffect(() => {
               }
 
               // Crear contenido del popup dinámicamente
-              const popupContainer = document.createElement("div");
+            const popupContainer = document.createElement("div");
 
               if (poligonoNombre) {
                 const titulo = document.createElement("b");
@@ -408,7 +409,21 @@ useEffect(() => {
                   console.log("URL usada:", archivoUrl);
 
                   const nombreArchivo = archivoUrl.split("/").pop();
-                  const nombreAjustado = nombreArchivo.replace(/_/g, " ");
+
+                   // === NUEVO CÓDIGO PARA LIMPIAR EL NOMBRE ===
+                  const mostrarExtension = true; // poné false si no querés mostrar .zip
+                  const ext = nombreArchivo.includes(".")
+                    ? nombreArchivo.slice(nombreArchivo.lastIndexOf("."))
+                    : "";
+                  const base = nombreArchivo.replace(/_/g, " ");
+                  const baseSinExt = base.replace(/\.[^/.]+$/, "");
+                  let limpio = baseSinExt.replace(/\s*C\d+\b/g, ""); // elimina C165, C166...
+                  limpio = limpio
+                    .replace(/\s{2,}/g, " ")
+                    .replace(/\s-\s+/g, " - ")
+                    .trim();
+                  const nombreAjustado = mostrarExtension ? (limpio + ext) : limpio;
+                  // ===========================================
 
                   const listItem = document.createElement("li");
                   const enlace = document.createElement("a");
@@ -1489,10 +1504,12 @@ useEffect(() => {
           >
             Clientes
           </button>
-<button className="btn btn-primary me-2" onClick={handleShowDescargarPuntosModal}>
-  Descarga de puntos {puntosCount > 0 && `(${puntosCount})`}
-</button>
-
+          <button
+            className="btn btn-primary me-2"
+            onClick={handleShowDescargarPuntosModal}
+          >
+            Descarga de puntos {puntosCount > 0 && `(${puntosCount})`}
+          </button>
         </div>
         <Select
           className="basic-single"
