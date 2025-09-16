@@ -189,28 +189,45 @@ const HomeCliente = () => {
               }
 
               // Popup simplificado (solo nombre, área y archivos)
-              let popupContent = "";
-              if (feature.properties?.name) {
-                const poligonoNombre = "C " + feature.properties.name; // Prefijo C + nombre
-                popupContent += `<b>${poligonoNombre}</b><br>`;
-              }
-              popupContent += `Área: ${areaFormatted} ha`;
+// Popup simplificado (solo nombre, área y archivos)
+let popupContent = "";
+if (feature.properties?.name) {
+  const poligonoNombre = "C " + feature.properties.name; // Prefijo C + nombre
+  popupContent += `<b>${poligonoNombre}</b><br>`;
+}
+popupContent += `Área: ${areaFormatted} ha`;
 
-              if (archivosAsociados.length > 0) {
-                popupContent += `<br>Archivos:<br><ul>`;
-                popupContent += archivosAsociados
-                  .map((archivo) => {
-                    const nombreArchivo = archivo.split("/").pop(); // Obtener el nombre del archivo
-                    const nombreAjustado = nombreArchivo.replace(/_/g, " "); // Reemplazar guiones bajos con espacios
-                    return `<li><a href="${archivo}" target="_blank" download>${nombreAjustado}</a></li>`;
-                  })
-                  .join("");
-                popupContent += `</ul>`;
-              }
+if (archivosAsociados.length > 0) {
+  popupContent += `<br>Archivos:<br><ul>`;
+  popupContent += archivosAsociados
+    .map((archivo) => {
+      const nombreArchivo = archivo.split("/").pop(); // ej: 13752 - ... Taipas.zip
 
-              layer.bindPopup(popupContent);
-            },
-          }).addTo(mapRef.current);
+      // === limpieza ===
+      const mostrarExtension = true; // poné false si NO querés mostrar .zip
+      const ext = nombreArchivo.includes(".")
+        ? nombreArchivo.slice(nombreArchivo.lastIndexOf("."))
+        : "";
+      const base = nombreArchivo.replace(/_/g, " ");
+      const baseSinExt = base.replace(/\.[^/.]+$/, "");
+      let limpio = baseSinExt.replace(/\s*C\d+\b/g, ""); // elimina C165, C166...
+      limpio = limpio
+        .replace(/\s{2,}/g, " ")
+        .replace(/\s-\s+/g, " - ")
+        .trim();
+      const nombreAjustado = mostrarExtension ? (limpio + ext) : limpio;
+      // =================
+
+      return `<li><a href="${archivo}" target="_blank" download>${nombreAjustado}</a></li>`;
+    })
+    .join("");
+  popupContent += `</ul>`;
+}
+
+layer.bindPopup(popupContent);
+},
+}).addTo(mapRef.current);
+
 
           // Ajustar el mapa para que muestre el contenido del KML
           if (mapRef.current && capa.getBounds) {
