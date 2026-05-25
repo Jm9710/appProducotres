@@ -4,7 +4,7 @@ import JSZip from "jszip";
 // ===== Base URL (igual que en Home) =====
 const apiUrl =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
-  "http://192.168.88.193:3001/";
+  "https://appproducotres-backend.onrender.com/";
 
 // Helpers de fetch
 const apiGet = (pathWithQuery) =>

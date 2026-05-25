@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 const apiUrl =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
-  "http://192.168.88.193:3001";
+  "https://appproducotres-backend.onrender.com/";
 
 // --- Helper: POST con progreso real usando XHR ---
 function xhrPostWithProgress(url, formData, onProgress) {

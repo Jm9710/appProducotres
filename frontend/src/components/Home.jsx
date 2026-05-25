@@ -144,10 +144,10 @@ const Home = () => {
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
 
-  //const apiUrl = "https://appproducotres-backend.onrender.com/";
+  const apiUrl = "https://appproducotres-backend.onrender.com/";
 
   //const apiUrl = "http://192.168.1.246:3001/";
-  const apiUrl = "http://192.168.88.193:3001/";
+  //const apiUrl = "http://192.168.88.193:3001/";
   const handleCargarArchivosClick = () => {
     if (!productorSeleccionado) {
       alert("Por favor seleccione un productor primero");
