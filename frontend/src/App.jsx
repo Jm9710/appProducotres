@@ -8,6 +8,7 @@ import "leaflet/dist/leaflet.css";
 import Login from './components/Login'
 import Home from './components/Home'
 import HomeCliente from './components/HomeCliente'
+import HomeRelevadores from './components/HomeRelevadores'
 import PrivateRoute from './components/PrivateRoute';
 
 
@@ -25,6 +26,9 @@ const App = () => {
       case '/home-cliente':
         document.title = 'SDC Taipas - Home Cliente';
         break;
+      case '/home-relevadores':
+        document.title = 'SDC Taipas - Home Relevadores';
+        break;
       default:
         document.title = 'SDC Taipas';
     }
@@ -37,6 +41,7 @@ const App = () => {
         <Route path="/home" element={<PrivateRoute><Home /></PrivateRoute>} />
         
         <Route path="/home-cliente" element={<PrivateRoute><HomeCliente /></PrivateRoute>} />
+        <Route path="/home-relevadores" element={<PrivateRoute><HomeRelevadores /></PrivateRoute>} />
       </Routes>
 
   )

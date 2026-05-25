@@ -13,14 +13,14 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
- const apiUrl = "https://appproducotres-backend.onrender.com/"
+  const apiUrl = "https://appproducotres-backend.onrender.com/"
 
-//const apiUrl = "http://192.168.1.246:3001/";
-//const apiUrl = "http://192.168.88.193:3001/";  
+  //const apiUrl = "http://192.168.1.246:3001/";
+  //const apiUrl = "http://192.168.88.193:3001/";
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-  
+
     try {
       const response = await fetch(`${apiUrl}api/login`, {
         method: "POST",
@@ -29,20 +29,21 @@ const Login = () => {
         },
         body: JSON.stringify({ user, password }),
       });
-  
+
       const data = await response.json();
-  
+
       if (response.ok) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", user);
         localStorage.setItem("nombre", data.nombre);
-        localStorage.setItem("cod_productor", data.cod_productor);  // Guardamos el cod_productor
-  
+        localStorage.setItem("cod_productor", data.cod_productor); // Guardamos el cod_productor
+
         if (data.tipo_usuario === "Oficina" || data.tipo_usuario === "Admin") {
           navigate("/home");
-        }
-        if (data.tipo_usuario === "Productor") {
+        } else if (data.tipo_usuario === "Productor") {
           navigate("/home-cliente");
+        } else if (data.tipo_usuario === "Relevador") {
+          navigate("/home-relevadores");
         }
       } else {
         if (response.status === 404) {
@@ -55,11 +56,11 @@ const Login = () => {
       }
     } catch (err) {
       setError("Error de conexión con el servidor");
-    }finally{
+    } finally {
       setLoading(false); // Asegúrate de que el loading se desactive al final
     }
   };
-  
+
   return (
     <div
       className="d-flex justify-content-center align-items-center"
@@ -134,7 +135,7 @@ const Login = () => {
           </div>
           {error && <p className="text-danger">{error}</p>}{" "}
           {/* Muestra errores */}
-          { loading ? (
+          {loading ? (
             <div className="text-center">
               <ClipLoader color="#007bff" loading={loading} size={30} />
             </div>
