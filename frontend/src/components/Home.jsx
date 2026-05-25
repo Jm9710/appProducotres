@@ -20,8 +20,6 @@ import DescargarPuntos from "./descargaPuntos";
 import { useDropzone } from "react-dropzone";
 import Select from "react-select";
 
-<<<<<<< HEAD
-=======
 function ensureZipExtension(filename) {
   const clean = filename?.trim() || "archivo";
   return clean.toLowerCase().endsWith(".zip") ? clean : `${clean}.zip`;
@@ -92,7 +90,6 @@ async function downloadBlobFile(url, fileName) {
   window.URL.revokeObjectURL(downloadUrl);
 }
 
->>>>>>> temp-backup
 const Home = () => {
   const [nomUsuario, setNomUsuario] = useState("");
   const [productores, setProductores] = useState([]);
@@ -121,32 +118,11 @@ const Home = () => {
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
-<<<<<<< HEAD
-  const [puntosCount, setPuntosCount] = useState(0);
-
-  const apiUrl = "https://appproducotres-backend.onrender.com/";
-
-  //onst apiUrl = "http://192.168.1.66:3001/";
-
-  //const apiUrl = "http://192.168.1.246:3001/";
-  //const apiUrl = "http://192.168.1.65:3001/";
-
-  // Carpeta de puntos (la misma de DescargaPuntos modo "drone")
-  // === arriba, cerca de apiUrl ===
-  const AVAIL_FOLDERS = ["/00004/Nubes", "/00004/CSV"]; // Drone + CSV
-
-  const isFolder = (it) =>
-    String(it?.type || it?.[".tag"] || it?.tag || "")
-      .toLowerCase()
-      .includes("folder");
-
-=======
 
   const apiUrl = "https://appproducotres-backend.onrender.com/";
 
   //const apiUrl = "http://192.168.1.246:3001/";
   //const apiUrl = "http://192.168.88.193:3001/";
->>>>>>> temp-backup
   const handleCargarArchivosClick = () => {
     if (!productorSeleccionado) {
       alert("Por favor seleccione un productor primero");
@@ -197,33 +173,14 @@ const Home = () => {
 
   const fetchArchivos = async (productorId, categoria) => {
     if (!productorId) return;
-<<<<<<< HEAD
-
-    setLoading(true);
-    console.log(`Cargando archivos para el productor ${productorId}`);
-
-=======
   
     setLoading(true);
     console.log(`Cargando archivos para el productor ${productorId}`);
   
->>>>>>> temp-backup
     try {
       const response = await fetch(
         `${apiUrl}api/productor/archivos?cod_productor=${productorId}`
       );
-<<<<<<< HEAD
-
-      if (!response.ok) {
-        throw new Error("Error al obtener los archivos");
-      }
-
-      const data = await response.json();
-      console.log("Datos recibidos:", JSON.stringify(data, null, 2));
-
-      setArchivosPorCategoria(data.archivos || {});
-
-=======
   
       if (!response.ok) {
         throw new Error("Error al obtener los archivos");
@@ -234,7 +191,6 @@ const Home = () => {
   
       setArchivosPorCategoria(data.archivos || {});
   
->>>>>>> temp-backup
       if (categoria) {
         setArchivosMostrados(data.archivos[categoria] || []);
       } else {
@@ -248,10 +204,7 @@ const Home = () => {
       setLoading(false);
     }
   };
-<<<<<<< HEAD
-=======
   
->>>>>>> temp-backup
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     noClick: true,
@@ -314,69 +267,6 @@ const Home = () => {
     fetchTiposArchivo();
   }, []);
 
-<<<<<<< HEAD
-  // === reemplaza tu useEffect de fetch/polling del contador ===
-  useEffect(() => {
-    const folders = AVAIL_FOLDERS.join(",");
-    const es = new EventSource(
-      `${apiUrl}/events?folders=${encodeURIComponent(folders)}`,
-      { withCredentials: false }
-    );
-
-    let closed = false;
-
-    const onMessage = (ev) => {
-      if (!ev.data) return;
-      try {
-        const msg = JSON.parse(ev.data); // { type, folder, name, size, ts }
-        if (msg.type === "file_created") {
-          // 1) Mostrá notificación
-          // 2) Si querés, refrescá el conteo UNA sola vez:
-          fetchCountOnce(); // tu función existente pero sin intervalos agresivos
-        }
-      } catch {}
-    };
-
-    const onOpen = () => console.log("SSE abierto");
-    const onError = () => {
-      console.warn("SSE error; reintentará solo");
-      // EventSource reintenta solo; no hagas reconexión manual salvo que quieras backoff custom
-    };
-
-    es.addEventListener("message", onMessage);
-    es.addEventListener("open", onOpen);
-    es.addEventListener("error", onError);
-
-    const fetchCountOnce = async () => {
-      // Podés usar la opción /list_counts que te pasé en el mensaje anterior
-      try {
-        const r = await fetch(`${apiUrl}/list_counts`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folders: AVAIL_FOLDERS }),
-        });
-        if (!r.ok) return;
-        const counts = await r.json();
-        const total = Object.values(counts).reduce((a, b) => a + (b || 0), 0);
-        setPuntosCount(total);
-      } catch {}
-    };
-
-    document.addEventListener("visibilitychange", () => {
-      // opcional: cuando vuelve visible, hacé un sync por las dudas
-      if (!document.hidden) fetchCountOnce();
-    });
-
-    return () => {
-      if (!closed) {
-        es.close();
-        closed = true;
-      }
-    };
-  }, [apiUrl]);
-
-=======
->>>>>>> temp-backup
   useEffect(() => {
     const nombre = localStorage.getItem("nombre");
     if (nombre) {
@@ -415,14 +305,9 @@ const Home = () => {
             style: (feature) => {
               const poligonoNombre = feature.properties?.name?.toString();
               const tieneArchivos = archivos.some((archivo) => {
-<<<<<<< HEAD
-                const cuadros =
-                  archivo
-=======
                 const nombreArchivo = getArchivoName(archivo);
                 const cuadros =
                   nombreArchivo
->>>>>>> temp-backup
                     .match(/_C(\d+)(?=_|$)/g)
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
@@ -439,14 +324,9 @@ const Home = () => {
             onEachFeature: (feature, layer) => {
               const poligonoNombre = feature.properties?.name?.toString();
               const archivosAsociados = archivos.filter((archivo) => {
-<<<<<<< HEAD
-                const cuadros =
-                  archivo
-=======
                 const nombreArchivo = getArchivoName(archivo);
                 const cuadros =
                   nombreArchivo
->>>>>>> temp-backup
                     .match(/_C(\d+)(?=_|$)/g)
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
@@ -507,100 +387,6 @@ const Home = () => {
                 });
               }
 
-<<<<<<< HEAD
-              // Crear contenido del popup dinámicamente
-            const popupContainer = document.createElement("div");
-
-              if (poligonoNombre) {
-                const titulo = document.createElement("b");
-                titulo.textContent = `C ${poligonoNombre}`;
-                popupContainer.appendChild(titulo);
-                popupContainer.appendChild(document.createElement("br"));
-              }
-
-              const areaTexto = document.createElement("span");
-              areaTexto.textContent = `Área: ${areaFormatted} ha`;
-              popupContainer.appendChild(areaTexto);
-
-              if (archivosAsociados.length > 0) {
-                popupContainer.appendChild(document.createElement("br"));
-                const listaArchivos = document.createElement("ul");
-
-                archivosAsociados.forEach((archivoUrl) => {
-                  console.log("URL usada:", archivoUrl);
-
-                  const nombreArchivo = archivoUrl.split("/").pop();
-
-                   // === NUEVO CÓDIGO PARA LIMPIAR EL NOMBRE ===
-                  const mostrarExtension = true; // poné false si no querés mostrar .zip
-                  const ext = nombreArchivo.includes(".")
-                    ? nombreArchivo.slice(nombreArchivo.lastIndexOf("."))
-                    : "";
-                  const base = nombreArchivo.replace(/_/g, " ");
-                  const baseSinExt = base.replace(/\.[^/.]+$/, "");
-                  let limpio = baseSinExt.replace(/\s*C\d+\b/g, ""); // elimina C165, C166...
-                  limpio = limpio
-                    .replace(/\s{2,}/g, " ")
-                    .replace(/\s-\s+/g, " - ")
-                    .trim();
-                  const nombreAjustado = mostrarExtension ? (limpio + ext) : limpio;
-                  // ===========================================
-
-                  const listItem = document.createElement("li");
-                  const enlace = document.createElement("a");
-                  enlace.textContent = nombreAjustado;
-                  enlace.href = archivoUrl;
-                  enlace.target = "_blank";
-                  enlace.download = nombreAjustado;
-
-                  enlace.addEventListener("click", (e) => {
-                    e.preventDefault();
-
-                    if (archivoUrl.includes("amazonaws.com")) {
-                      // Abrir directo en nueva pestaña para evitar problemas con CORS o headers
-                      window.open(archivoUrl, "_blank");
-                      return;
-                    }
-
-                    // Si no es URL S3, fallback con fetch para descargar blob
-                    fetch(archivoUrl)
-                      .then((res) => {
-                        if (!res.ok)
-                          throw new Error(
-                            `Error al descargar el archivo: ${res.statusText}`
-                          );
-                        return res.blob();
-                      })
-                      .then((blob) => {
-                        const urlBlob = window.URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = urlBlob;
-                        a.download = nombreAjustado;
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
-                        window.URL.revokeObjectURL(urlBlob);
-                      })
-                      .catch((error) => {
-                        console.error(
-                          "Error al descargar el archivo desde el blob:",
-                          error
-                        );
-                        alert(
-                          "No se pudo descargar el archivo. Intente nuevamente."
-                        );
-                      });
-                  });
-
-                  listItem.appendChild(enlace);
-                  listaArchivos.appendChild(listItem);
-                });
-
-                popupContainer.appendChild(listaArchivos);
-              }
-
-              layer.bindPopup(popupContainer);
-=======
 // Crear contenido del popup dinámicamente
 const popupContainer = document.createElement("div");
 
@@ -657,7 +443,6 @@ if (archivosAsociados.length > 0) {
 
 layer.bindPopup(popupContainer);
 
->>>>>>> temp-backup
             },
           }).addTo(mapRef.current);
 
@@ -700,11 +485,7 @@ layer.bindPopup(popupContainer);
         for (const kml of data.kmls) {
           try {
             const nombreKml = kml.ruta_archivo.split("/").pop();
-<<<<<<< HEAD
-            const archivos = kml.archivos.map((archivo) => archivo.nombre);
-=======
             const archivos = kml.archivos || [];
->>>>>>> temp-backup
 
             const capa = await cargarKmlEnMapa(
               kml.ruta_archivo,
@@ -1688,16 +1469,9 @@ layer.bindPopup(popupContainer);
             Clientes
           </button>
           <button
-<<<<<<< HEAD
-            className="btn btn-primary me-2"
-            onClick={handleShowDescargarPuntosModal}
-          >
-            Descarga de puntos {puntosCount > 0 && `(${puntosCount})`}
-=======
           className="btn btn-primary me-2"
           onClick={handleShowDescargarPuntosModal}>
             Descarga de puntos
->>>>>>> temp-backup
           </button>
         </div>
         <Select
@@ -1905,11 +1679,7 @@ layer.bindPopup(popupContainer);
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           tabIndex="-1"
         >
-<<<<<<< HEAD
-          <div className="modal-dialog">
-=======
           <div className="modal-dialog modal">
->>>>>>> temp-backup
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Cargar Archivo KML</h5>
@@ -1982,38 +1752,6 @@ layer.bindPopup(popupContainer);
       )}
 
       {showDescargaPuntosModal && (
-<<<<<<< HEAD
-        <>
-          <div
-            className="modal fade show"
-            style={{ display: "block", backgroundColor: "rgba(0, 0, 0, 0.5)" }}
-          >
-            <div className="modal-dialog modal-xl">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Descarga de Puntos</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => {
-                      setShowDescargaPuntosModal(false);
-                      window.location.reload();
-                    }}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <DescargarPuntos
-                    onClose={() => {
-                      setShowDescargaPuntosModal(false);
-                      window.location.reload();
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-=======
         <div
           className="modal fade show"
           style={{ display: "block", backgroundColor: "rgba(0, 0, 0, 0.5)" }}
@@ -2042,7 +1780,6 @@ layer.bindPopup(popupContainer);
             </div>
           </div>
         </div>
->>>>>>> temp-backup
       )}
     </div>
   );

@@ -6,11 +6,7 @@ const CargarArchivos = ({ productorId, tiposArchivo, archivosPrecargados = [], o
   const [isUploading, setIsUploading] = useState(false);
   const apiUrl = "https://appproducotres-backend.onrender.com/"
   //const apiUrl = "http://192.168.1.246:3001/";
-<<<<<<< HEAD
-  //const apiUrl = "http://192.168.1.65:3001/";
-=======
   //const apiUrl = "http://192.168.88.193:3001/";
->>>>>>> temp-backup
   // Carga inicial de archivos arrastrados
   useEffect(() => {
     if (archivosPrecargados.length > 0) {

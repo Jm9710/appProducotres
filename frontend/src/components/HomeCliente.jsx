@@ -10,8 +10,6 @@ import "leaflet-kml";
 import * as toGeoJSON from "@mapbox/togeojson";
 import VerInformesClientes from "./VerinformesCliente";
 
-<<<<<<< HEAD
-=======
 function ensureZipExtension(filename) {
   const clean = filename?.trim() || "archivo";
   return clean.toLowerCase().endsWith(".zip") ? clean : `${clean}.zip`;
@@ -82,7 +80,6 @@ async function downloadBlobFile(url, fileName) {
   window.URL.revokeObjectURL(downloadUrl);
 }
 
->>>>>>> temp-backup
 const HomeCliente = () => {
   const [nomUsuario, setNomUsuario] = useState("");
   const [codProductor, setCodProductor] = useState(null);
@@ -101,11 +98,7 @@ const HomeCliente = () => {
   const apiUrl = "https://appproducotres-backend.onrender.com/"
 
   //const apiUrl = "http://192.168.1.246:3001/";
-<<<<<<< HEAD
-  //const apiUrl = "http://192.168.1.65:3001/";
-=======
   //const apiUrl = "http://192.168.88.193:3001/";
->>>>>>> temp-backup
   const isMobile = useMediaQuery({ maxWidth: 767 });
 
   const navigate = useNavigate();
@@ -180,14 +173,9 @@ const HomeCliente = () => {
             style: (feature) => {
               const poligonoNombre = feature.properties?.name?.toString();
               const tieneArchivos = archivos.some((archivo) => {
-<<<<<<< HEAD
-                const cuadros =
-                  archivo
-=======
                 const nombreArchivo = getArchivoName(archivo);
                 const cuadros =
                   nombreArchivo
->>>>>>> temp-backup
                     .match(/_C(\d+)(?=_|$)/g)
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
@@ -204,14 +192,9 @@ const HomeCliente = () => {
             onEachFeature: (feature, layer) => {
               const poligonoNombre = feature.properties?.name?.toString();
               const archivosAsociados = archivos.filter((archivo) => {
-<<<<<<< HEAD
-                const cuadros =
-                  archivo
-=======
                 const nombreArchivo = getArchivoName(archivo);
                 const cuadros =
                   nombreArchivo
->>>>>>> temp-backup
                     .match(/_C(\d+)(?=_|$)/g)
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
@@ -277,48 +260,6 @@ const HomeCliente = () => {
                 });
               }
 
-<<<<<<< HEAD
-              // Popup simplificado (solo nombre, área y archivos)
-// Popup simplificado (solo nombre, área y archivos)
-let popupContent = "";
-if (feature.properties?.name) {
-  const poligonoNombre = "C " + feature.properties.name; // Prefijo C + nombre
-  popupContent += `<b>${poligonoNombre}</b><br>`;
-}
-popupContent += `Área: ${areaFormatted} ha`;
-
-if (archivosAsociados.length > 0) {
-  popupContent += `<br>Archivos:<br><ul>`;
-  popupContent += archivosAsociados
-    .map((archivo) => {
-      const nombreArchivo = archivo.split("/").pop(); // ej: 13752 - ... Taipas.zip
-
-      // === limpieza ===
-      const mostrarExtension = true; // poné false si NO querés mostrar .zip
-      const ext = nombreArchivo.includes(".")
-        ? nombreArchivo.slice(nombreArchivo.lastIndexOf("."))
-        : "";
-      const base = nombreArchivo.replace(/_/g, " ");
-      const baseSinExt = base.replace(/\.[^/.]+$/, "");
-      let limpio = baseSinExt.replace(/\s*C\d+\b/g, ""); // elimina C165, C166...
-      limpio = limpio
-        .replace(/\s{2,}/g, " ")
-        .replace(/\s-\s+/g, " - ")
-        .trim();
-      const nombreAjustado = mostrarExtension ? (limpio + ext) : limpio;
-      // =================
-
-      return `<li><a href="${archivo}" target="_blank" download>${nombreAjustado}</a></li>`;
-    })
-    .join("");
-  popupContent += `</ul>`;
-}
-
-layer.bindPopup(popupContent);
-},
-}).addTo(mapRef.current);
-
-=======
               const popupContainer = document.createElement("div");
 
               if (feature.properties?.name) {
@@ -377,7 +318,6 @@ layer.bindPopup(popupContent);
               layer.bindPopup(popupContainer);
             },
           }).addTo(mapRef.current);
->>>>>>> temp-backup
 
           // Ajustar el mapa para que muestre el contenido del KML
           if (mapRef.current && capa.getBounds) {
@@ -420,11 +360,7 @@ layer.bindPopup(popupContent);
         try {
           const capa = await cargarKmlEnMapa(
             kml.ruta_archivo,
-<<<<<<< HEAD
-            kml.archivos.map((archivo) => archivo.nombre)
-=======
             kml.archivos || []
->>>>>>> temp-backup
           );
           nuevasCapas.push(capa);
         } catch (error) {
