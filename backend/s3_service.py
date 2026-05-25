@@ -2,10 +2,7 @@ import os
 import boto3
 from app_config import Config
 import mimetypes
-<<<<<<< HEAD
-=======
 from io import BytesIO
->>>>>>> temp-backup
 from urllib.parse import quote
 
 
@@ -29,13 +26,10 @@ def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
             # Por defecto si no se detecta
             content_type = 'application/octet-stream'
 
-<<<<<<< HEAD
-=======
         archivo.seek(0, os.SEEK_END)
         upload_size = archivo.tell()
         archivo.seek(0)
 
->>>>>>> temp-backup
         # Configurar headers extras
         extra_args = {
             'ContentType': content_type,
@@ -44,10 +38,7 @@ def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
 
         # Subir el archivo con los headers
         s3.upload_fileobj(archivo, Config.S3_BUCKET_NAME, nombre_archivo, ExtraArgs=extra_args)
-<<<<<<< HEAD
-=======
         print(f"[S3_UPLOAD] key={nombre_archivo} bytes={upload_size} content_type={content_type}")
->>>>>>> temp-backup
         print(f"Archivo {nombre_archivo} subido exitosamente a S3 con Content-Type {content_type}")
 
         if return_url:
@@ -68,8 +59,6 @@ def generar_url_firmada(ruta_s3, expiracion=3600):
         content_type, _ = mimetypes.guess_type(ruta_s3)
         if content_type is None:
             content_type = 'application/octet-stream'
-<<<<<<< HEAD
-=======
         if ruta_s3.lower().endswith('.zip'):
             content_type = 'application/zip'
 
@@ -84,7 +73,6 @@ def generar_url_firmada(ruta_s3, expiracion=3600):
             )
         except Exception as head_error:
             print(f"[S3_SIGN] No se pudo leer metadata de {ruta_s3}: {head_error}")
->>>>>>> temp-backup
 
         url = s3.generate_presigned_url(
             ClientMethod='get_object',
@@ -104,8 +92,6 @@ def generar_url_firmada(ruta_s3, expiracion=3600):
         print(f"Error generando URL firmada: {e}")
         return None
 
-<<<<<<< HEAD
-=======
 def descargar_archivo_de_s3(ruta_s3):
     try:
         content_type, _ = mimetypes.guess_type(ruta_s3)
@@ -140,7 +126,6 @@ def descargar_archivo_de_s3(ruta_s3):
         print(f"Error descargando archivo de S3: {e}")
         return None, None
 
->>>>>>> temp-backup
 def eliminar_archivo_de_s3(ruta_completa_s3):
     try:
         print(f"Intentando eliminar el archivo: {ruta_completa_s3} del bucket: {Config.S3_BUCKET_NAME}")
@@ -167,7 +152,3 @@ def eliminar_archivo_de_s3(ruta_completa_s3):
 
 
 
-<<<<<<< HEAD
-
-=======
->>>>>>> temp-backup
