@@ -7,7 +7,11 @@ const CargarKml = ({ productorId, onClose }) => {
   const apiUrl = "https://appproducotres-backend.onrender.com/"
 
   //const apiUrl = "http://192.168.1.246:3001/";
+<<<<<<< HEAD
   //const apiUrl = "http://192.168.1.65:3001/";
+=======
+  //const apiUrl = "http://192.168.88.193:3001/";
+>>>>>>> temp-backup
   const handleFileChange = (e) => {
     setArchivo(e.target.files[0]);
   };
@@ -75,4 +79,8 @@ const CargarKml = ({ productorId, onClose }) => {
   );
 };
 
+<<<<<<< HEAD
 export default CargarKml;
+=======
+export default CargarKml;
+>>>>>>> temp-backup

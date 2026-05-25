@@ -16,7 +16,11 @@ const Login = () => {
  const apiUrl = "https://appproducotres-backend.onrender.com/"
 
 //const apiUrl = "http://192.168.1.246:3001/";
+<<<<<<< HEAD
 //const apiUrl = "http://192.168.1.65:3001/";  
+=======
+//const apiUrl = "http://192.168.88.193:3001/";  
+>>>>>>> temp-backup
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -37,7 +41,10 @@ const Login = () => {
         localStorage.setItem("user", user);
         localStorage.setItem("nombre", data.nombre);
         localStorage.setItem("cod_productor", data.cod_productor);  // Guardamos el cod_productor
+<<<<<<< HEAD
         localStorage.setItem("tipo_usuario", data.tipo_usuario); // <-- NUEVO
+=======
+>>>>>>> temp-backup
   
         if (data.tipo_usuario === "Oficina" || data.tipo_usuario === "Admin") {
           navigate("/home");
@@ -45,9 +52,12 @@ const Login = () => {
         if (data.tipo_usuario === "Productor") {
           navigate("/home-cliente");
         }
+<<<<<<< HEAD
         if (data.tipo_usuario === "Relevador") {
           navigate("/home-relevadores")
         }
+=======
+>>>>>>> temp-backup
       } else {
         if (response.status === 404) {
           setError("Usuario no encontrado");

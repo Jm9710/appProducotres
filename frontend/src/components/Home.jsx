@@ -20,6 +20,79 @@ import DescargarPuntos from "./descargaPuntos";
 import { useDropzone } from "react-dropzone";
 import Select from "react-select";
 
+<<<<<<< HEAD
+=======
+function ensureZipExtension(filename) {
+  const clean = filename?.trim() || "archivo";
+  return clean.toLowerCase().endsWith(".zip") ? clean : `${clean}.zip`;
+}
+
+function getZipDownloadName(filePath) {
+  const rawName = decodeURIComponent((getArchivoName(filePath) || "archivo").split("?")[0].split("/").pop());
+  const readableName = rawName.replace(/_/g, " ").replace(/\s+zip$/i, ".zip");
+  return ensureZipExtension(readableName);
+}
+
+function getArchivoName(archivo) {
+  return typeof archivo === "string"
+    ? archivo
+    : archivo?.nombre || archivo?.ruta_descarga || "archivo";
+}
+
+function getArchivoDownloadUrl(archivo, apiUrl) {
+  const url = typeof archivo === "string"
+    ? archivo
+    : archivo?.ruta_descarga_app || archivo?.ruta_descarga || archivo?.nombre || "";
+
+  if (url.startsWith("/api/")) {
+    return `${apiUrl.replace(/\/$/, "")}${url}`;
+  }
+
+  return url;
+}
+
+async function downloadBlobFile(url, fileName) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error al descargar el archivo (${response.status}): ${errorText}`);
+  }
+
+  const contentType = response.headers.get("Content-Type") || "";
+  const contentLength = response.headers.get("Content-Length");
+
+  if (/text\/html|application\/json|text\/plain/i.test(contentType)) {
+    const errorText = await response.text();
+    throw new Error(
+      `La respuesta no es un ZIP binario. Content-Type=${contentType || "sin header"}. ` +
+      errorText.slice(0, 200)
+    );
+  }
+
+  const blob = await response.blob();
+  console.log("[ZIP_DOWNLOAD]", {
+    fileName,
+    contentType,
+    expectedBytes: contentLength,
+    receivedBytes: blob.size,
+  });
+
+  if (!blob.size) {
+    throw new Error("La descarga llegó vacía.");
+  }
+
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = downloadUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
+>>>>>>> temp-backup
 const Home = () => {
   const [nomUsuario, setNomUsuario] = useState("");
   const [productores, setProductores] = useState([]);
@@ -48,6 +121,7 @@ const Home = () => {
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
+<<<<<<< HEAD
   const [puntosCount, setPuntosCount] = useState(0);
 
   const apiUrl = "https://appproducotres-backend.onrender.com/";
@@ -66,6 +140,13 @@ const Home = () => {
       .toLowerCase()
       .includes("folder");
 
+=======
+
+  const apiUrl = "https://appproducotres-backend.onrender.com/";
+
+  //const apiUrl = "http://192.168.1.246:3001/";
+  //const apiUrl = "http://192.168.88.193:3001/";
+>>>>>>> temp-backup
   const handleCargarArchivosClick = () => {
     if (!productorSeleccionado) {
       alert("Por favor seleccione un productor primero");
@@ -116,14 +197,22 @@ const Home = () => {
 
   const fetchArchivos = async (productorId, categoria) => {
     if (!productorId) return;
+<<<<<<< HEAD
 
     setLoading(true);
     console.log(`Cargando archivos para el productor ${productorId}`);
 
+=======
+  
+    setLoading(true);
+    console.log(`Cargando archivos para el productor ${productorId}`);
+  
+>>>>>>> temp-backup
     try {
       const response = await fetch(
         `${apiUrl}api/productor/archivos?cod_productor=${productorId}`
       );
+<<<<<<< HEAD
 
       if (!response.ok) {
         throw new Error("Error al obtener los archivos");
@@ -134,6 +223,18 @@ const Home = () => {
 
       setArchivosPorCategoria(data.archivos || {});
 
+=======
+  
+      if (!response.ok) {
+        throw new Error("Error al obtener los archivos");
+      }
+  
+      const data = await response.json();
+      console.log("Datos recibidos:", JSON.stringify(data, null, 2));
+  
+      setArchivosPorCategoria(data.archivos || {});
+  
+>>>>>>> temp-backup
       if (categoria) {
         setArchivosMostrados(data.archivos[categoria] || []);
       } else {
@@ -147,6 +248,10 @@ const Home = () => {
       setLoading(false);
     }
   };
+<<<<<<< HEAD
+=======
+  
+>>>>>>> temp-backup
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     noClick: true,
@@ -209,6 +314,7 @@ const Home = () => {
     fetchTiposArchivo();
   }, []);
 
+<<<<<<< HEAD
   // === reemplaza tu useEffect de fetch/polling del contador ===
   useEffect(() => {
     const folders = AVAIL_FOLDERS.join(",");
@@ -269,6 +375,8 @@ const Home = () => {
     };
   }, [apiUrl]);
 
+=======
+>>>>>>> temp-backup
   useEffect(() => {
     const nombre = localStorage.getItem("nombre");
     if (nombre) {
@@ -307,8 +415,14 @@ const Home = () => {
             style: (feature) => {
               const poligonoNombre = feature.properties?.name?.toString();
               const tieneArchivos = archivos.some((archivo) => {
+<<<<<<< HEAD
                 const cuadros =
                   archivo
+=======
+                const nombreArchivo = getArchivoName(archivo);
+                const cuadros =
+                  nombreArchivo
+>>>>>>> temp-backup
                     .match(/_C(\d+)(?=_|$)/g)
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
@@ -325,8 +439,14 @@ const Home = () => {
             onEachFeature: (feature, layer) => {
               const poligonoNombre = feature.properties?.name?.toString();
               const archivosAsociados = archivos.filter((archivo) => {
+<<<<<<< HEAD
                 const cuadros =
                   archivo
+=======
+                const nombreArchivo = getArchivoName(archivo);
+                const cuadros =
+                  nombreArchivo
+>>>>>>> temp-backup
                     .match(/_C(\d+)(?=_|$)/g)
                     ?.map((match) => match.slice(2)) || [];
                 return cuadros.includes(poligonoNombre);
@@ -387,6 +507,7 @@ const Home = () => {
                 });
               }
 
+<<<<<<< HEAD
               // Crear contenido del popup dinámicamente
             const popupContainer = document.createElement("div");
 
@@ -479,6 +600,64 @@ const Home = () => {
               }
 
               layer.bindPopup(popupContainer);
+=======
+// Crear contenido del popup dinámicamente
+const popupContainer = document.createElement("div");
+
+if (poligonoNombre) {
+  const titulo = document.createElement("b");
+  titulo.textContent = `C ${poligonoNombre}`;
+  popupContainer.appendChild(titulo);
+  popupContainer.appendChild(document.createElement("br"));
+}
+
+const areaTexto = document.createElement("span");
+areaTexto.textContent = `Área: ${areaFormatted} ha`;
+popupContainer.appendChild(areaTexto);
+
+if (archivosAsociados.length > 0) {
+  popupContainer.appendChild(document.createElement("br"));
+  const listaArchivos = document.createElement("ul");
+
+  archivosAsociados.forEach((archivo) => {
+    const archivoUrl = getArchivoDownloadUrl(archivo, apiUrl);
+    console.log("URL usada:", archivoUrl);
+  
+    const nombreAjustado = getZipDownloadName(archivo);
+
+    const listItem = document.createElement("li");
+    const enlace = document.createElement("a");
+    enlace.textContent = nombreAjustado;
+    enlace.href = archivoUrl;
+    enlace.target = "_blank";
+    enlace.download = nombreAjustado;
+
+    enlace.addEventListener("click", (e) => {
+      e.preventDefault();
+
+      if (archivoUrl.includes("amazonaws.com")) {
+        // Abrir directo en nueva pestaña para evitar problemas con CORS o headers
+        window.open(archivoUrl, "_blank");
+        return;
+      }
+
+      downloadBlobFile(archivoUrl, nombreAjustado)
+        .catch((error) => {
+          console.error("Error al descargar el archivo desde el blob:", error);
+          alert("No se pudo descargar el archivo. Intente nuevamente.");
+        });
+    });
+
+    listItem.appendChild(enlace);
+    listaArchivos.appendChild(listItem);
+  });
+
+  popupContainer.appendChild(listaArchivos);
+}
+
+layer.bindPopup(popupContainer);
+
+>>>>>>> temp-backup
             },
           }).addTo(mapRef.current);
 
@@ -521,7 +700,11 @@ const Home = () => {
         for (const kml of data.kmls) {
           try {
             const nombreKml = kml.ruta_archivo.split("/").pop();
+<<<<<<< HEAD
             const archivos = kml.archivos.map((archivo) => archivo.nombre);
+=======
+            const archivos = kml.archivos || [];
+>>>>>>> temp-backup
 
             const capa = await cargarKmlEnMapa(
               kml.ruta_archivo,
@@ -1505,10 +1688,16 @@ const Home = () => {
             Clientes
           </button>
           <button
+<<<<<<< HEAD
             className="btn btn-primary me-2"
             onClick={handleShowDescargarPuntosModal}
           >
             Descarga de puntos {puntosCount > 0 && `(${puntosCount})`}
+=======
+          className="btn btn-primary me-2"
+          onClick={handleShowDescargarPuntosModal}>
+            Descarga de puntos
+>>>>>>> temp-backup
           </button>
         </div>
         <Select
@@ -1716,7 +1905,11 @@ const Home = () => {
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           tabIndex="-1"
         >
+<<<<<<< HEAD
           <div className="modal-dialog">
+=======
+          <div className="modal-dialog modal">
+>>>>>>> temp-backup
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Cargar Archivo KML</h5>
@@ -1789,6 +1982,7 @@ const Home = () => {
       )}
 
       {showDescargaPuntosModal && (
+<<<<<<< HEAD
         <>
           <div
             className="modal fade show"
@@ -1819,6 +2013,36 @@ const Home = () => {
             </div>
           </div>
         </>
+=======
+        <div
+          className="modal fade show"
+          style={{ display: "block", backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+        >
+          <div className="modal-dialog modal-xl">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Descarga de Puntos</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowDescargaPuntosModal(false); // Cierra el modal
+                    window.location.reload(); // Recarga la página
+                  }}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <DescargarPuntos
+                  onClose={() => {
+                    setShowDescargaPuntosModal(false); // Cierra el modal
+                    window.location.reload(); // Recarga la página
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+>>>>>>> temp-backup
       )}
     </div>
   );

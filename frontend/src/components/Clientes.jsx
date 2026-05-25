@@ -4,7 +4,11 @@ import Select from "react-select";
 const Clientes = () => {
   const apiUrl = "https://appproducotres-backend.onrender.com/";
 
+<<<<<<< HEAD
   //const apiUrl = "http://192.168.1.246:3001/";
+=======
+  //const apiUrl = "http://192.168.88.193:3001/";
+>>>>>>> temp-backup
 
   const [activePanel, setActivePanel] = useState(null);
   const [clientes, setClientes] = useState([]);
