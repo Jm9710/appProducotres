@@ -91,6 +91,30 @@ async function downloadBlobFile(url, fileName) {
   window.URL.revokeObjectURL(downloadUrl);
 }
 
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      const preview = text.slice(0, 200);
+      throw new Error(
+        `Respuesta no JSON (${response.status}) desde ${url}: ${preview}`
+      );
+    }
+  }
+
+  if (!response.ok) {
+    const message = data?.error || data?.msg || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 const Home = () => {
   const [nomUsuario, setNomUsuario] = useState("");
   const [productores, setProductores] = useState([]);
@@ -120,10 +144,10 @@ const Home = () => {
   const mapRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 767 });
 
-  const apiUrl = "https://appproducotres-backend.onrender.com/";
+  //const apiUrl = "https://appproducotres-backend.onrender.com/";
 
   //const apiUrl = "http://192.168.1.246:3001/";
-  //const apiUrl = "http://192.168.88.193:3001/";
+  const apiUrl = "http://192.168.88.193:3001/";
   const handleCargarArchivosClick = () => {
     if (!productorSeleccionado) {
       alert("Por favor seleccione un productor primero");
@@ -179,15 +203,9 @@ const Home = () => {
     console.log(`Cargando archivos para el productor ${productorId}`);
   
     try {
-      const response = await fetch(
+      const data = await fetchJson(
         `${apiUrl}api/productor/archivos?cod_productor=${productorId}`
       );
-  
-      if (!response.ok) {
-        throw new Error("Error al obtener los archivos");
-      }
-  
-      const data = await response.json();
   
       setArchivosPorCategoria(data.archivos || {});
   
@@ -255,8 +273,7 @@ const Home = () => {
   useEffect(() => {
     const fetchTiposArchivo = async () => {
       try {
-        const response = await fetch(`${apiUrl}api/tipo_archivo`);
-        const data = await response.json();
+        const data = await fetchJson(`${apiUrl}api/tipo_archivo`);
         setTiposArchivo(data);
       } catch (error) {
         console.error("Error fetching tipos de archivo:", error);
@@ -274,8 +291,7 @@ const Home = () => {
 
     const fetchProductores = async () => {
       try {
-        const response = await fetch(`${apiUrl}api/usuarios/productores`);
-        const data = await response.json();
+        const data = await fetchJson(`${apiUrl}api/usuarios/productores`);
         setProductores(data);
       } catch (error) {
         console.error("Error fetching productores:", error);
@@ -470,10 +486,9 @@ layer.bindPopup(popupContainer);
     kmlBoundsRef.current = null;
 
     try {
-      const response = await fetch(
+      const data = await fetchJson(
         `${apiUrl}api/productor/kml?cod_productor=${codProductor}`
       );
-      const data = await response.json();
 
       setKmlData(data);
 

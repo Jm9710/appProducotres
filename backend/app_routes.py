@@ -3,10 +3,23 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_jwt_extended import create_access_token, jwt_required
 from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
-from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3, descargar_archivo_de_s3, S3ServiceError
+from s3_service import (
+    subir_archivo_a_s3,
+    eliminar_archivo_de_s3,
+    generar_url_firmada,
+    descargar_archivo_de_s3,
+    S3ServiceError,
+)
 from app_config import Config
 import xml.etree.ElementTree as ET
 from sqlalchemy.orm import joinedload
+import io
+from dropbox_service import (
+    listar_archivos as dbx_listar_archivos,
+    subir_archivo as dbx_subir_archivo,
+    descargar_archivo as dbx_descargar_archivo,
+    mover_archivo as dbx_mover_archivo,
+)
 
 
 
@@ -193,6 +206,7 @@ def login():
 
     token = create_access_token(identity=usuario.id_usuario)
     tipo_usuario = usuario.tipo_usuario.tipo
+
     return jsonify({
         "token": token,
         "tipo_usuario": tipo_usuario,
@@ -364,9 +378,14 @@ def obtener_archivos_por_productor():
         tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
         tipo_nombre = tipo_archivo.tipo if tipo_archivo else 'Desconocido'
 
+        # Extraer la key S3 de la ruta original almacenada
+        key_s3 = archivo.ruta_descarga.split(f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/")[-1]
+
+        # Generar URL firmada justo ahora (expiración 10 minutos por ejemplo)
+        url_firmada = generar_url_firmada(key_s3, expiracion=600)  # 600 segundos = 10 minutos
+
         archivo_data = archivo.serialize()
-        archivo_data['ruta_descarga_app'] = f"/api/archivo/{archivo.id_archivo}/descargar"
-        archivo_data['ruta_descarga'] = archivo_data['ruta_descarga_app']
+        archivo_data['ruta_descarga'] = url_firmada if url_firmada else archivo.ruta_descarga
 
         archivos_clasificados.setdefault(tipo_nombre, []).append(archivo_data)
 
@@ -375,43 +394,6 @@ def obtener_archivos_por_productor():
         'cod_productor': productor.cod_productor,
         'archivos': archivos_clasificados
     }), 200
-
-@routes.route('/api/archivo/<int:id_archivo>/descargar', methods=['GET'])
-def descargar_archivo(id_archivo):
-    archivo = Archivo.query.get(id_archivo)
-    if not archivo:
-        return jsonify({"error": "Archivo no encontrado"}), 404
-
-    prefijo_s3 = f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/"
-    key_s3 = archivo.ruta_descarga.split(prefijo_s3)[-1] if archivo.ruta_descarga.startswith(prefijo_s3) else archivo.ruta_descarga
-
-    try:
-        buffer, metadata = descargar_archivo_de_s3(key_s3)
-    except S3ServiceError as e:
-        return jsonify({
-            "error": e.message,
-            "aws_code": e.aws_code,
-        }), e.status_code
-
-    print(
-        "[FLASK_DOWNLOAD] "
-        f"id_archivo={id_archivo} "
-        f"filename={metadata['filename']} "
-        f"bytes_sent={metadata['content_length']} "
-        f"content_type={metadata['content_type']}"
-    )
-
-    response = send_file(
-        buffer,
-        mimetype=metadata['content_type'],
-        as_attachment=True,
-        download_name=metadata['filename'],
-        max_age=0,
-    )
-    response.headers['Content-Length'] = str(metadata['content_length'])
-    response.headers['X-Original-Content-Length'] = str(metadata['s3_content_length'] or metadata['content_length'])
-    response.headers['X-S3-Content-Type'] = metadata['s3_content_type'] or ''
-    return response
 
 
 @routes.route('/api/eliminar_archivo', methods=['DELETE'])
@@ -578,33 +560,551 @@ def obtener_kml_por_productor():
     for kml in kmls:
         print(f"KML ID {kml.id_kml} tiene los siguientes archivos asociados:")
         for archivo in kml.archivos:  # Usar los archivos ya cargados por subqueryload
-            print(f"- id={archivo.id_archivo}, nombre={archivo.nombre}")
-
-    kmls_data = []
-
-    for kml in kmls:
-        kml_data = kml.serialize()
-        archivos_data = []
-
-        for archivo in kml.archivos:
-            archivo_data = archivo.serialize()
-            archivo_data['ruta_descarga_app'] = f"/api/archivo/{archivo.id_archivo}/descargar"
-            archivo_data['ruta_descarga'] = archivo_data['ruta_descarga_app']
-            archivos_data.append(archivo_data)
-
-        kml_data['archivos'] = archivos_data
-        kmls_data.append(kml_data)
+            print(f"- {archivo.nombre}, Ruta de descarga: {archivo.ruta_descarga}")
 
     # Serializar los datos y enviarlos
     return jsonify({
         'productor': productor.nombre,
         'cod_productor': productor.cod_productor,
-        'kmls': kmls_data
+        'kmls': [kml.serialize() for kml in kmls]
+    }), 200
+
+from flask import Blueprint, jsonify, request, send_file
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from flask_jwt_extended import create_access_token, jwt_required
+from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
+from s3_service import (
+    subir_archivo_a_s3,
+    eliminar_archivo_de_s3,
+    generar_url_firmada,
+    descargar_archivo_de_s3,
+    S3ServiceError,
+)
+from app_config import Config
+import xml.etree.ElementTree as ET
+from sqlalchemy.orm import joinedload
+import io
+
+# 🔧 Import de Dropbox con alias (para no chocar con listar_archivos de S3)
+from dropbox_service import (
+    listar_archivos as dbx_listar_archivos,
+    subir_archivo as dbx_subir_archivo,
+    descargar_archivo as dbx_descargar_archivo,
+    mover_archivo as dbx_mover_archivo,
+)
+
+
+def kml_to_geojson(kml_data):
+    """Convert KML data to GeoJSON format."""
+    kml_tree = ET.ElementTree(ET.fromstring(kml_data))
+    root = kml_tree.getroot()
+
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+
+    geojson_features = []
+    for placemark in root.findall('.//kml:Placemark', ns):
+        geometry = placemark.find('.//kml:Polygon//kml:coordinates', ns)
+        if geometry is not None:
+            coordinates = geometry.text.strip().split(' ')
+            coords = [[float(coord.split(',')[0]), float(coord.split(',')[1])] for coord in coordinates]
+            feature = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': [coords]
+                },
+                'properties': {
+                    'name': placemark.find('.//kml:name', ns).text if placemark.find('.//kml:name', ns) is not None else 'Unnamed'
+                }
+            }
+            geojson_features.append(feature)
+
+    return {
+        'type': 'FeatureCollection',
+        'features': geojson_features
+    }
+
+
+# Crear un Blueprint para las rutas
+routes = Blueprint('routes', __name__)
+
+# ------------------ PING ------------------
+@routes.route('/')
+def home():
+    return "¡Servidor Flask funcionando!"
+
+# ------------------ USUARIOS ------------------
+@routes.route('/api/usuario', methods=['POST'])
+def crear_usuario():
+    data = request.get_json()
+    if not data or not data.get('nom_us') or not data.get('pass_us') or not data.get('nombre'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    tipo_usuario = TipoUsuario.query.get(data['tipo_us'])
+    if not tipo_usuario:
+        return jsonify({"msg": "Tipo de usuario no válido"}), 400
+
+    hashed_password = generate_password_hash(data['pass_us'], method='pbkdf2:sha256')
+
+    nuevo_usuario = Usuario(
+        nom_us=data['nom_us'],
+        pass_us=hashed_password,
+        nombre=data['nombre'],
+        cod_productor=data.get('cod_productor'),
+        tipo_us=tipo_usuario.id_tipo,
+        premium=data.get('premium', False)
+    )
+
+    try:
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+        return jsonify(nuevo_usuario.serialize()), 201
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear el usuario"}), 500
+
+@routes.route('/api/usuarios', methods=['GET'])
+def obtener_usuarios():
+    usuarios = Usuario.query.all()
+    usuarios_serializados = [usuario.serialize() for usuario in usuarios]
+    return jsonify(usuarios_serializados), 200
+
+@routes.route('/api/usuario/<int:id_usuario>', methods=['DELETE'])
+def eliminar_usuario(id_usuario):
+    usuario = Usuario.query.get(id_usuario)
+    if not usuario:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+
+    try:
+        db.session.delete(usuario)
+        db.session.commit()
+        return jsonify({"msg": "Usuario eliminado exitosamente"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al eliminar el usuario", "error": str(e)}), 500
+
+@routes.route('/api/usuario/<int:id_usuario>', methods=['PUT'])
+def actualizar_usuario(id_usuario):
+    data = request.get_json()
+    if not data:
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    usuario = Usuario.query.get(id_usuario)
+    if not usuario:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+
+    if 'pass_us' in data and data['pass_us']:
+        data['pass_us'] = generate_password_hash(data['pass_us'], method='pbkdf2:sha256')
+
+    for key in data:
+        if hasattr(usuario, key) and key != 'id_usuario':
+            setattr(usuario, key, data[key])
+
+    try:
+        db.session.commit()
+        return jsonify(usuario.serialize()), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al actualizar el usuario", "error": str(e)}), 500
+
+# ------------------ TIPOS DE USUARIO ------------------
+@routes.route('/api/tipo_usuario', methods=['POST'])
+def crear_tipo_usuario():
+    data = request.get_json()
+    if not data or not data.get('tipo'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    nuevo_tipo_usuario = TipoUsuario(tipo=data['tipo'])
+    try:
+        db.session.add(nuevo_tipo_usuario)
+        db.session.commit()
+        return jsonify(nuevo_tipo_usuario.serialize()), 201
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear el tipo de usuario"}), 500
+
+@routes.route('/api/tipo_usuario', methods=['GET'])
+def obtener_tipos_usuario():
+    tipos_usuario = TipoUsuario.query.all()
+    return jsonify([tipo.serialize() for tipo in tipos_usuario]), 200
+
+@routes.route('/api/tipo_usuario/<int:id_tipo>', methods=['PUT'])
+def actualizar_tipo_usuario(id_tipo):
+    tipo_usuario = TipoUsuario.query.get(id_tipo)
+    if not tipo_usuario:
+        return jsonify({"msg": "Tipo de usuario no encontrado"}), 404
+
+    data = request.get_json()
+    if not data or not data.get('tipo'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    try:
+        tipo_usuario.tipo = data['tipo']
+        db.session.commit()
+        return jsonify(tipo_usuario.serialize()), 200
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al actualizar el tipo de usuario"}), 500
+
+# ------------------ LOGIN ------------------
+@routes.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data or not data.get("user") or not data.get("password"):
+        return jsonify({"error": "Faltan datos"}), 400
+
+    usuario = Usuario.query.filter_by(nom_us=data["user"]).first()
+    if not usuario:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+    if not check_password_hash(usuario.pass_us, data["password"]):
+        return jsonify({"error": "Contraseña incorrecta"}), 401
+
+    token = create_access_token(identity=usuario.id_usuario)
+    tipo_usuario = usuario.tipo_usuario.tipo
+
+    return jsonify({
+        "token": token,
+        "tipo_usuario": tipo_usuario,
+        "nom_us": usuario.nom_us,
+        "nombre": usuario.nombre,
+        "cod_productor": usuario.cod_productor,
+    }), 200
+
+# ------------------ TIPOS DE ARCHIVO ------------------
+@routes.route('/api/tipo_archivo', methods=['POST'])
+def crear_tipo_archivo():
+    data = request.get_json()
+    if not data or not data.get('tipo'):
+        return jsonify({"msg": "Faltan datos"}), 400
+
+    nuevo_tipo_archivo = TipoArchivo(tipo=data['tipo'])
+    try:
+        db.session.add(nuevo_tipo_archivo)
+        db.session.commit()
+        return jsonify(nuevo_tipo_archivo.serialize()), 201
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear el tipo de archivo"}), 500
+
+@routes.route('/api/tipo_archivo', methods=['GET'])
+def obtener_tipos_archivo():
+    tipos_archivo = TipoArchivo.query.all()
+    return jsonify([tipo.serialize() for tipo in tipos_archivo]), 200
+
+# ------------------ ARCHIVOS S3 ------------------
+@routes.route('/api/archivos', methods=['GET'])
+def listar_archivos_s3():
+    productor_id = request.args.get('productorId')
+    if not productor_id:
+        return jsonify({'error': 'Productor ID no proporcionado'}), 400
+
+    productor = Usuario.query.filter_by(cod_productor=productor_id).first()
+    if not productor:
+        return jsonify({'error': 'Productor no encontrado'}), 404
+
+    archivos = Archivo.query.filter_by(us_asociado=productor.id_usuario).all()
+    resultado = []
+    for archivo in archivos:
+        tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
+        archivo_data = archivo.serialize()
+        archivo_data['tipo_archivo'] = tipo_archivo.tipo if tipo_archivo else None
+        resultado.append(archivo_data)
+
+    return jsonify(resultado), 200
+
+# ------------------ DROPBOX ------------------
+@routes.route("/list", methods=["GET"])
+def list_files():
+    folder = request.args.get("folder", "")
+    data = dbx_listar_archivos(folder)
+    return jsonify(data), (200 if isinstance(data, list) else 400)
+
+@routes.route("/upload", methods=["POST"])
+def upload_file():
+    if "file" not in request.files or "path" not in request.form:
+        return jsonify({"error": "Falta file o path"}), 400
+    f = request.files["file"]
+    path = request.form["path"]
+    res = dbx_subir_archivo(f, path)
+    return jsonify(res), (200 if "msg" in res else 400)
+
+@routes.route("/download", methods=["GET"])
+def download_file():
+    path = request.args.get("path")
+    if not path:
+        return jsonify({"error": "Falta path"}), 400
+    blob, filename = dbx_descargar_archivo(path)
+    if blob is None:
+        return jsonify({"error": filename}), 400
+    return send_file(io.BytesIO(blob), as_attachment=True, download_name=filename)
+
+@routes.route("/move", methods=["POST"])
+def move_file():
+    data = request.get_json() or {}
+    if "from" not in data or "to" not in data:
+        return jsonify({"error": "Faltan from/to"}), 400
+    res = dbx_mover_archivo(data["from"], data["to"])
+    return jsonify(res), (200 if "msg" in res else 400)
+
+@routes.route("/consume", methods=["GET"])
+def consume_file():
+    path = request.args.get("path")
+    dest = request.args.get("dest")
+    if not path or not dest:
+        return jsonify({"error": "Faltan path/dest"}), 400
+
+    blob, filename = dbx_descargar_archivo(path)
+    if blob is None:
+        return jsonify({"error": filename}), 400
+
+    res = dbx_mover_archivo(path, dest)
+    if "error" in res:
+        return jsonify(res), 400
+
+    return send_file(io.BytesIO(blob), as_attachment=True, download_name=filename)
+
+
+def _s3_key_from_url_or_key(value):
+    prefix = f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/"
+    if value.startswith(prefix):
+        return value[len(prefix):]
+    return value.lstrip("/")
+
+
+# ------------------ RUTAS ACTIVAS DEL BLUEPRINT REGISTRADO ------------------
+# Este archivo tenia una segunda definicion de `routes = Blueprint(...)`.
+# Las rutas siguientes quedan declaradas despues de esa segunda definicion, que
+# hoy es la instancia que app.py registra.
+@routes.route('/api/debug/routes', methods=['GET'])
+def debug_routes():
+    rules = []
+    from flask import current_app
+
+    for rule in current_app.url_map.iter_rules():
+        methods = sorted(rule.methods - {'HEAD', 'OPTIONS'})
+        rules.append({
+            'endpoint': rule.endpoint,
+            'methods': methods,
+            'rule': str(rule),
+        })
+
+    return jsonify(sorted(rules, key=lambda item: item['rule'])), 200
+
+
+@routes.route('/api/usuarios/productores', methods=['GET'])
+def obtener_productores_activo():
+    productores = (
+        Usuario.query
+        .join(TipoUsuario)
+        .filter(TipoUsuario.tipo == 'Productor')
+        .all()
+    )
+    return jsonify([p.serialize() for p in productores]), 200
+
+
+@routes.route('/api/subir_archivo', methods=['POST'])
+def subir_archivo_activo():
+    if 'archivo' not in request.files:
+        return jsonify({"msg": "No se ha subido ningun archivo"}), 400
+
+    archivo = request.files['archivo']
+    tipo_archivo_id = request.form.get('tipoArchivo')
+    cod_productor = request.form.get('productorId')
+
+    if not tipo_archivo_id:
+        return jsonify({"msg": "No se ha especificado el tipo de archivo"}), 400
+    if not cod_productor:
+        return jsonify({"msg": "No se ha especificado el productor ID"}), 400
+    if archivo.filename == '':
+        return jsonify({"msg": "No se ha seleccionado ningun archivo"}), 400
+
+    filename = secure_filename(archivo.filename)
+    productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
+    if not productor:
+        return jsonify({"msg": "Productor no encontrado"}), 404
+
+    tipo_archivo = TipoArchivo.query.filter_by(id_tipo_archivo=tipo_archivo_id).first()
+    if not tipo_archivo:
+        return jsonify({"msg": "Tipo de archivo no encontrado"}), 404
+
+    ruta_s3 = f"{cod_productor}/{tipo_archivo.tipo}/{filename}"
+    mensaje = subir_archivo_a_s3(archivo, ruta_s3)
+
+    if "exitosamente" not in mensaje:
+        return jsonify({"msg": mensaje}), 400
+
+    kml_asociado = KML.query.filter_by(us_asociado=productor.id_usuario).first()
+    if not kml_asociado:
+        return jsonify({"msg": "No se ha encontrado un KML asociado al productor."}), 400
+
+    nuevo_archivo = Archivo(
+        nombre=filename,
+        ruta_descarga=f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}',
+        us_asociado=productor.id_usuario,
+        TipoArchivo=tipo_archivo_id,
+        kml_asociado=kml_asociado.id_kml
+    )
+
+    try:
+        db.session.add(nuevo_archivo)
+        db.session.commit()
+        return jsonify({"msg": "Archivo cargado y asociado al KML exitosamente"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al guardar el archivo", "error": str(e)}), 500
+
+
+@routes.route('/api/productor/archivos', methods=['GET'])
+def obtener_archivos_por_productor_activo():
+    cod_productor = request.args.get('cod_productor')
+    categoria = request.args.get('categoria')
+
+    if not cod_productor:
+        return jsonify({'error': 'Productor ID no proporcionado'}), 400
+
+    productor = Usuario.query.filter_by(cod_productor=cod_productor.strip()).first()
+    if not productor:
+        return jsonify({'error': 'Productor no encontrado'}), 404
+
+    query = Archivo.query.filter_by(us_asociado=productor.id_usuario)
+    if categoria:
+        tipo_archivo = TipoArchivo.query.filter_by(tipo=categoria).first()
+        if tipo_archivo:
+            query = query.filter_by(TipoArchivo=tipo_archivo.id_tipo_archivo)
+
+    archivos_clasificados = {}
+    for archivo in query.all():
+        tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
+        tipo_nombre = tipo_archivo.tipo if tipo_archivo else 'Desconocido'
+        key_s3 = _s3_key_from_url_or_key(archivo.ruta_descarga)
+        url_firmada = generar_url_firmada(key_s3, expiracion=600)
+        archivo_data = archivo.serialize()
+        archivo_data['tipo_archivo'] = tipo_nombre
+        archivo_data['ruta_descarga'] = url_firmada if url_firmada else archivo.ruta_descarga
+        archivo_data['ruta_descarga_app'] = f"/api/archivo/{archivo.id_archivo}/descargar"
+        archivos_clasificados.setdefault(tipo_nombre, []).append(archivo_data)
+
+    return jsonify({
+        'productor': productor.nombre,
+        'cod_productor': productor.cod_productor,
+        'archivos': archivos_clasificados
     }), 200
 
 
+@routes.route('/api/archivo/<int:id_archivo>/descargar', methods=['GET'])
+def descargar_archivo_activo(id_archivo):
+    archivo = Archivo.query.get(id_archivo)
+    if not archivo:
+        return jsonify({"error": "Archivo no encontrado"}), 404
+
+    key_s3 = _s3_key_from_url_or_key(archivo.ruta_descarga)
+    try:
+        buffer, metadata = descargar_archivo_de_s3(key_s3)
+    except S3ServiceError as e:
+        return jsonify({"error": e.message}), e.status_code
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=metadata.get('filename') or archivo.nombre,
+        mimetype=metadata.get('content_type') or 'application/octet-stream',
+    )
 
 
+@routes.route('/api/eliminar_archivo', methods=['DELETE'])
+def eliminar_archivo_activo():
+    data = request.get_json(silent=True) or {}
+    archivo_nombre = data.get('archivo_nombre')
+    if not archivo_nombre:
+        return jsonify({"msg": "Nombre de archivo no proporcionado"}), 400
+
+    archivo = Archivo.query.filter_by(nombre=archivo_nombre).first()
+    if not archivo:
+        return jsonify({"msg": "Archivo no encontrado"}), 404
+
+    cod_productor = archivo.usuario.cod_productor
+    tipo_archivo_nombre = archivo.tipo_archivo.tipo if archivo.tipo_archivo else None
+
+    if not eliminar_archivo_de_s3(archivo.ruta_descarga):
+        return jsonify({"msg": "Error al eliminar archivo de S3"}), 500
+
+    try:
+        db.session.delete(archivo)
+        db.session.commit()
+        return jsonify({
+            "msg": "Archivo y registro eliminados exitosamente",
+            "cod_productor": cod_productor,
+            "tipo_archivo_nombre": tipo_archivo_nombre
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Error interno del servidor: {str(e)}"}), 500
 
 
-    
+@routes.route('/api/subir_kml', methods=['POST'])
+def subir_kml_activo():
+    if 'archivo' not in request.files:
+        return jsonify({"msg": "No se ha subido ningun archivo KML"}), 400
+
+    archivo_kml = request.files['archivo']
+    cod_productor = request.form.get('productorId')
+    if not cod_productor:
+        return jsonify({"msg": "No se ha especificado el productor ID"}), 400
+    if archivo_kml.filename == '':
+        return jsonify({"msg": "No se ha seleccionado ningun archivo KML"}), 400
+
+    filename = secure_filename(archivo_kml.filename)
+    if not filename.lower().endswith('.kml'):
+        return jsonify({"msg": "El archivo subido no es un archivo KML"}), 400
+
+    productor = Usuario.query.filter_by(cod_productor=cod_productor).first()
+    if not productor:
+        return jsonify({"msg": "Productor no encontrado"}), 404
+
+    ruta_s3 = f"{cod_productor}/kml/{filename}"
+    kml_data = archivo_kml.read()
+    archivo_kml.seek(0)
+    geojson_data = kml_to_geojson(kml_data)
+    mensaje = subir_archivo_a_s3(archivo_kml, ruta_s3)
+
+    if "exitosamente" not in mensaje:
+        return jsonify({"msg": mensaje}), 400
+
+    kml_existente = KML.query.filter_by(us_asociado=productor.id_usuario).first()
+    ruta_archivo = f'https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/{ruta_s3}'
+
+    if kml_existente:
+        kml_existente.ruta_archivo = ruta_archivo
+    else:
+        db.session.add(KML(ruta_archivo=ruta_archivo, us_asociado=productor.id_usuario))
+
+    db.session.commit()
+    return jsonify({
+        "msg": "Archivo KML cargado/actualizado exitosamente",
+        "geojson": geojson_data
+    }), 200
+
+
+@routes.route('/api/productor/kml', methods=['GET'])
+def obtener_kml_por_productor_activo():
+    cod_productor = request.args.get('cod_productor')
+    if not cod_productor:
+        return jsonify({'error': 'Codigo del productor no proporcionado'}), 400
+
+    productor = Usuario.query.filter_by(cod_productor=cod_productor.strip()).first()
+    if not productor:
+        return jsonify({'error': 'Productor no encontrado'}), 404
+
+    kmls = (
+        KML.query
+        .filter_by(us_asociado=productor.id_usuario)
+        .options(subqueryload(KML.archivos))
+        .all()
+    )
+
+    return jsonify({
+        'productor': productor.nombre,
+        'cod_productor': productor.cod_productor,
+        'kmls': [kml.serialize() for kml in kmls]
+    }), 200

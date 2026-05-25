@@ -1,40 +1,43 @@
 import React, { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 
-/**
- * DescargaPuntos
- *
- * Funcionalidad pedida:
- * - Botón/formulario para Cargar archivos
- * - Listado de archivos disponibles (carpeta de "entrantes" en Dropbox)
- * - Reglas de subida:
- *   - Medido por DRON: subir un LAS y un DXF, comprimirlos en ZIP (nombre elegido por el usuario)
- *   - Medido por GPS: subir CSV tal cual (sin comprimir, conserva el nombre de archivo)
- * - Descarga: cuando se descarga un archivo, debe moverse automáticamente a otra carpeta en Dropbox
- *   y desaparecer de la lista (carpeta de "procesados").
- *
- * Notas de integración backend asumidas (Flask sugerido):
- *   GET    /list?folder=<path>                 -> lista archivos de Dropbox en <path>
- *   POST   /upload (multipart: file, path)     -> sube archivo a Dropbox en "path"
- *   GET    /download?path=<path>               -> descarga archivo binario (Content-Disposition)
- *   POST   /move                               -> { from: <path>, to: <path> }
- *   GET    /consume?path=...&dest=...          -> (opcional) descarga y mueve en una sola llamada
- *
- * Si /consume no existe, este componente hace fallback a (descargar -> mover) en dos pasos.
- */
+// ===== Base URL (igual que en Home) =====
+const apiUrl =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
+  "http://192.168.88.193:3001/";
 
-const AVAILABLE_FOLDER = "/superficies/entrantes";   // carpeta "disponibles"
-const PROCESSED_FOLDER = "/superficies/procesados";  // carpeta "descargados"
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "https://appproducotres-backend.onrender.com/";
+// Helpers de fetch
+const apiGet = (pathWithQuery) =>
+  fetch(`${apiUrl.replace(/\/$/, "")}${pathWithQuery}`);
+const apiPostJson = (path, body) =>
+  fetch(`${apiUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const apiPostForm = (path, formData) =>
+  fetch(`${apiUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    body: formData,
+  });
 
-const apiUrl = (path) => `${API_BASE_URL.replace(/\/$/, "")}${path}`;
+// Rutas Dropbox por modo
+const PATHS = {
+  drone: { avail: "/00004/Nubes", processed: "/00004/Nubes/Descargados" },
+  gps: { avail: "/00004/CSV", processed: "/00004/CSV/Descargados" },
+};
+
+// --- Helper robusto para detectar carpetas ---
+const isFolder = (it) => {
+  const t = String(it.type || it[".tag"] || it.tag || "").toLowerCase();
+  return t.includes("folder"); // cubre "folder", "foldermetadata", etc.
+};
 
 const DescargaPuntos = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
 
-  // Form state
   const [modo, setModo] = useState("drone"); // "drone" | "gps"
   const [lasFile, setLasFile] = useState(null);
   const [dxfFile, setDxfFile] = useState(null);
@@ -42,22 +45,24 @@ const DescargaPuntos = () => {
   const [csvFiles, setCsvFiles] = useState([]);
 
   const canUpload = useMemo(() => {
-    if (modo === "drone") {
+    if (modo === "drone")
       return !!lasFile && !!dxfFile && zipName.trim().length > 0;
-    }
-    // gps
     return csvFiles && csvFiles.length > 0;
   }, [modo, lasFile, dxfFile, zipName, csvFiles]);
 
-  // Helpers -------------------------------------------------------------
+  // Lista ---------------------------------------------------------------
   const fetchList = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(apiUrl(`/list?folder=${encodeURIComponent(AVAILABLE_FOLDER)}`));
+      const folder = PATHS[modo].avail;
+      const res = await apiGet(`/list?folder=${encodeURIComponent(folder)}`);
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+
+      // Filtra carpetas al guardar en estado
+      const onlyFiles = (Array.isArray(data) ? data : []).filter((it) => !isFolder(it));
+      setItems(onlyFiles);
     } catch (e) {
       setError(String(e.message || e));
     } finally {
@@ -67,48 +72,47 @@ const DescargaPuntos = () => {
 
   useEffect(() => {
     fetchList();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modo]);
 
-  // Upload --------------------------------------------------------------
+  // Subida --------------------------------------------------------------
   const handleUpload = async () => {
     setError("");
     if (!canUpload) return;
-
     try {
       if (modo === "drone") {
-        // Crear ZIP con LAS + DXF
+        // ZIP con LAS + DXF
         const zip = new JSZip();
         zip.file(lasFile.name, lasFile);
         zip.file(dxfFile.name, dxfFile);
-        const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+        const blob = await zip.generateAsync({
+          type: "blob",
+          compression: "DEFLATE",
+        });
         const finalName = zipName.endsWith(".zip") ? zipName : `${zipName}.zip`;
-        const path = `${AVAILABLE_FOLDER}/${finalName}`;
+        const path = `${PATHS.drone.avail}/${finalName}`;
 
         const fd = new FormData();
-        fd.append("file", new File([blob], finalName, { type: "application/zip" }));
+        fd.append(
+          "file",
+          new File([blob], finalName, { type: "application/zip" })
+        );
         fd.append("path", path);
 
-        console.log("[ZIP_UPLOAD]", {
-          name: finalName,
-          bytes: blob.size,
-          contentType: blob.type || "application/zip"
-        });
-
-        const up = await fetch(apiUrl("/upload"), { method: "POST", body: fd });
+        const up = await apiPostForm("/upload", fd);
         if (!up.ok) throw new Error(await up.text());
       } else {
-        // GPS: subir CSV(s) tal cual (uno por uno)
+        // CSV(s) directo
         for (const f of csvFiles) {
           const fd = new FormData();
-          const path = `${AVAILABLE_FOLDER}/${f.name}`;
+          const path = `${PATHS.gps.avail}/${f.name}`;
           fd.append("file", f, f.name);
           fd.append("path", path);
-          const up = await fetch(apiUrl("/upload"), { method: "POST", body: fd });
+          const up = await apiPostForm("/upload", fd);
           if (!up.ok) throw new Error(await up.text());
         }
       }
 
-      // Limpio formulario y refresco lista
       setLasFile(null);
       setDxfFile(null);
       setZipName("");
@@ -121,41 +125,40 @@ const DescargaPuntos = () => {
     }
   };
 
-  // Download + Move -----------------------------------------------------
+  // Descargar + mover ---------------------------------------------------
   const handleDownload = async (item) => {
     setError("");
-    const fromPath = item.path;
+    const fromPath =
+      item.path_lower || item.path || `${PATHS[modo].avail}/${item.name}`;
     const fileName = item.name;
-    const toPath = `${PROCESSED_FOLDER}/${fileName}`;
+    const toPath = `${PATHS[modo].processed}/${fileName}`;
 
     try {
-      // 1) Intento /consume (descarga y move atómico)
-      const consumeUrl = apiUrl(`/consume?path=${encodeURIComponent(fromPath)}&dest=${encodeURIComponent(toPath)}`);
-      const tryConsume = await fetch(consumeUrl);
+      // Intento /consume
+      const tryConsume = await apiGet(
+        `/consume?path=${encodeURIComponent(
+          fromPath
+        )}&dest=${encodeURIComponent(toPath)}`
+      );
 
       if (tryConsume.ok) {
-        // Descargar blob devuelto por /consume
-        const blob = await readDownloadBlob(tryConsume, fileName);
+        const blob = await tryConsume.blob();
         triggerBrowserDownload(blob, fileName);
       } else if (tryConsume.status === 404) {
-        // 2) Fallback: /download y luego /move
-        const down = await fetch(apiUrl(`/download?path=${encodeURIComponent(fromPath)}`));
+        // fallback: /download + /move
+        const down = await apiGet(
+          `/download?path=${encodeURIComponent(fromPath)}`
+        );
         if (!down.ok) throw new Error(await down.text());
-        const blob = await readDownloadBlob(down, fileName);
+        const blob = await down.blob();
         triggerBrowserDownload(blob, fileName);
 
-        // mover
-        const mv = await fetch(apiUrl("/move"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ from: fromPath, to: toPath })
-        });
+        const mv = await apiPostJson("/move", { from: fromPath, to: toPath });
         if (!mv.ok) throw new Error(await mv.text());
       } else {
         throw new Error(await tryConsume.text());
       }
 
-      // refrescar lista (el archivo debe desaparecer de disponibles)
       await fetchList();
     } catch (e) {
       console.error(e);
@@ -163,54 +166,7 @@ const DescargaPuntos = () => {
     }
   };
 
-  const readDownloadBlob = async (response, fileName) => {
-    const contentType = response.headers.get("Content-Type") || "";
-    const contentLength = response.headers.get("Content-Length");
-    const disposition = response.headers.get("Content-Disposition") || "";
-
-    console.log("[ZIP_DOWNLOAD_HEADERS]", {
-      fileName,
-      contentType,
-      contentLength,
-      disposition
-    });
-
-    if (/text\/html|application\/json|text\/plain/i.test(contentType)) {
-      const body = await response.text();
-      throw new Error(
-        `La descarga de ${fileName} no devolvio un binario ZIP. ` +
-        `Content-Type=${contentType || "sin header"}. ` +
-        body.slice(0, 200)
-      );
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const expected = contentLength ? Number(contentLength) : null;
-    const received = arrayBuffer.byteLength;
-
-    console.log("[ZIP_DOWNLOAD_BODY]", {
-      fileName,
-      expectedBytes: expected,
-      receivedBytes: received,
-      contentType
-    });
-
-    if (expected !== null && expected !== received) {
-      throw new Error(`Tamaño de descarga inválido para ${fileName}: esperado ${expected}, recibido ${received}`);
-    }
-
-    const blobType = fileName.toLowerCase().endsWith(".zip")
-      ? "application/zip"
-      : contentType || "application/octet-stream";
-    return new Blob([arrayBuffer], { type: blobType });
-  };
-
   const triggerBrowserDownload = (blob, name) => {
-    console.log("[BROWSER_DOWNLOAD]", {
-      name,
-      bytes: blob.size,
-      contentType: blob.type
-    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -226,7 +182,6 @@ const DescargaPuntos = () => {
     <div className="container py-3">
       <h3 className="mb-3">Cargar y descargar superficies</h3>
 
-      {/* Formulario de carga */}
       <div className="card shadow-sm mb-4">
         <div className="card-body">
           <div className="mb-3">
@@ -241,7 +196,9 @@ const DescargaPuntos = () => {
                   checked={modo === "drone"}
                   onChange={() => setModo("drone")}
                 />
-                <label className="form-check-label" htmlFor="modoDrone">Dron (LAS + DXF → ZIP)</label>
+                <label className="form-check-label" htmlFor="modoDrone">
+                  Dron (LAS + DXF → ZIP)
+                </label>
               </div>
               <div className="form-check">
                 <input
@@ -252,49 +209,32 @@ const DescargaPuntos = () => {
                   checked={modo === "gps"}
                   onChange={() => setModo("gps")}
                 />
-                <label className="form-check-label" htmlFor="modoGPS">GPS (CSV)</label>
+                <label className="form-check-label" htmlFor="modoGPS">
+                  GPS (CSV)
+                </label>
               </div>
             </div>
           </div>
 
-          {modo === "drone" ? (
-            <div className="row g-3">
-              <div className="col-md-4">
-                <label className="form-label">Archivo LAS</label>
-                <input className="form-control" type="file" accept=".las,.laz" onChange={(e)=>setLasFile(e.target.files?.[0]||null)} />
-              </div>
-              <div className="col-md-4">
-                <label className="form-label">Archivo DXF</label>
-                <input className="form-control" type="file" accept=".dxf" onChange={(e)=>setDxfFile(e.target.files?.[0]||null)} />
-              </div>
-              <div className="col-md-4">
-                <label className="form-label">Nombre del ZIP</label>
-                <input className="form-control" placeholder="ej: campo_norte_2025-08-28.zip" value={zipName} onChange={(e)=>setZipName(e.target.value)} />
-              </div>
-            </div>
-          ) : (
-            <div className="mb-3">
-              <label className="form-label">Archivos CSV</label>
-              <input className="form-control" type="file" multiple accept=".csv" onChange={(e)=>setCsvFiles(Array.from(e.target.files||[]))} />
-              <div className="form-text">Puedes seleccionar uno o varios CSV.</div>
-            </div>
-          )}
-
-          <div className="d-flex align-items-center gap-2">
+          {/* Zona de subida (opcional) */}
+          <div className="d-flex align-items-center gap-2 mt-2">
             <button className="btn btn-success" disabled={!canUpload} onClick={handleUpload}>
-              Cargar archivos
+              Subir archivos
             </button>
             {error && <span className="text-danger">{error}</span>}
           </div>
         </div>
       </div>
 
-      {/* Lista de archivos disponibles */}
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-2">
-            <h5 className="m-0">Archivos disponibles</h5>
-            <button className="btn btn-outline-secondary btn-sm" onClick={fetchList} disabled={loading}>
+            <h5 className="m-0">Archivos disponibles ({items.length})</h5>
+            <button
+              className="btn btn-outline-secondary btn-sm"
+              onClick={fetchList}
+              disabled={loading}
+            >
               {loading ? "Actualizando..." : "Actualizar"}
             </button>
           </div>
@@ -312,24 +252,40 @@ const DescargaPuntos = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((it) => (
-                    <tr key={it.path_lower || it.path}>
-                      <td>{it.name}</td>
-                      <td>{it.type?.replace("Metadata", "").replace("File", "Archivo") || "Archivo"}</td>
-                      <td className="text-end">
-                        <button className="btn btn-primary btn-sm" onClick={() => handleDownload({
-                          name: it.name,
-                          path: it.path_lower || it.path || `${AVAILABLE_FOLDER}/${it.name}`
-                        })}>
-                          Descargar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {items
+                    .filter((it) => !isFolder(it)) // extra seguro (además del filtrado al cargar)
+                    .map((it) => (
+                      <tr key={it.path_lower || it.path || it.name}>
+                        <td>{it.name}</td>
+                        <td>
+                          {it.type
+                            ?.replace("Metadata", "")
+                            .replace("File", "Archivo") || "Archivo"}
+                        </td>
+                        <td className="text-end">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() =>
+                              handleDownload({
+                                name: it.name,
+                                path:
+                                  it.path_lower ||
+                                  it.path ||
+                                  `${PATHS[modo].avail}/${it.name}`,
+                              })
+                            }
+                          >
+                            Descargar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
           )}
+
+          {error && !loading && <div className="text-danger mt-2">{error}</div>}
         </div>
       </div>
     </div>

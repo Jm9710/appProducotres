@@ -2,12 +2,13 @@
 import os
 import io
 import posixpath
+from pathlib import Path
 import dropbox
 from dropbox.files import WriteMode, FileMetadata, FolderMetadata, CreateFolderError
 from dropbox.exceptions import ApiError
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).with_name(".env"))
 
 # --- Preferir refresh token (tokens de corta duración se renuevan solos) ---
 APP_KEY = os.getenv("DROPBOX_APP_KEY")
