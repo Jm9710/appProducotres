@@ -61,6 +61,7 @@ async function downloadBlobFile(url, fileName) {
   const blob = await response.blob();
   console.log("[ZIP_DOWNLOAD]", {
     fileName,
+    status: response.status,
     contentType,
     expectedBytes: contentLength,
     receivedBytes: blob.size,

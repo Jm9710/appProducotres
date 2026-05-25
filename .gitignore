@@ -21,6 +21,8 @@ dist/
 dist-ssr/
 
 # Env
+.env
+.env.*
 *.local
 
 # Editors

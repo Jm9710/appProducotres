@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_jwt_extended import create_access_token, jwt_required
 from models import db, Usuario, TipoUsuario, KML, KMLTaipas, Archivo, TipoArchivo
-from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3, generar_url_firmada, descargar_archivo_de_s3
+from s3_service import subir_archivo_a_s3, eliminar_archivo_de_s3, descargar_archivo_de_s3, S3ServiceError
 from app_config import Config
 import xml.etree.ElementTree as ET
 from sqlalchemy.orm import joinedload
@@ -364,16 +364,9 @@ def obtener_archivos_por_productor():
         tipo_archivo = TipoArchivo.query.get(archivo.TipoArchivo)
         tipo_nombre = tipo_archivo.tipo if tipo_archivo else 'Desconocido'
 
-        # Extraer la key S3 de la ruta original almacenada
-        key_s3 = archivo.ruta_descarga.split(f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/")[-1]
-
-        # Generar URL firmada justo ahora (expiración 10 minutos por ejemplo)
-        url_firmada = generar_url_firmada(key_s3, expiracion=600)  # 600 segundos = 10 minutos
-
         archivo_data = archivo.serialize()
-        archivo_data['ruta_descarga_s3'] = archivo.ruta_descarga
         archivo_data['ruta_descarga_app'] = f"/api/archivo/{archivo.id_archivo}/descargar"
-        archivo_data['ruta_descarga'] = url_firmada if url_firmada else archivo.ruta_descarga
+        archivo_data['ruta_descarga'] = archivo_data['ruta_descarga_app']
 
         archivos_clasificados.setdefault(tipo_nombre, []).append(archivo_data)
 
@@ -387,14 +380,18 @@ def obtener_archivos_por_productor():
 def descargar_archivo(id_archivo):
     archivo = Archivo.query.get(id_archivo)
     if not archivo:
-        return jsonify({"msg": "Archivo no encontrado"}), 404
+        return jsonify({"error": "Archivo no encontrado"}), 404
 
     prefijo_s3 = f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/"
     key_s3 = archivo.ruta_descarga.split(prefijo_s3)[-1] if archivo.ruta_descarga.startswith(prefijo_s3) else archivo.ruta_descarga
 
-    buffer, metadata = descargar_archivo_de_s3(key_s3)
-    if buffer is None or metadata is None:
-        return jsonify({"msg": "Error al descargar archivo de S3"}), 500
+    try:
+        buffer, metadata = descargar_archivo_de_s3(key_s3)
+    except S3ServiceError as e:
+        return jsonify({
+            "error": e.message,
+            "aws_code": e.aws_code,
+        }), e.status_code
 
     print(
         "[FLASK_DOWNLOAD] "
@@ -581,23 +578,18 @@ def obtener_kml_por_productor():
     for kml in kmls:
         print(f"KML ID {kml.id_kml} tiene los siguientes archivos asociados:")
         for archivo in kml.archivos:  # Usar los archivos ya cargados por subqueryload
-            print(f"- {archivo.nombre}, Ruta de descarga: {archivo.ruta_descarga}")
+            print(f"- id={archivo.id_archivo}, nombre={archivo.nombre}")
 
     kmls_data = []
-    prefijo_s3 = f"https://{Config.S3_BUCKET_NAME}.s3.{Config.S3_REGION}.amazonaws.com/"
 
     for kml in kmls:
         kml_data = kml.serialize()
         archivos_data = []
 
         for archivo in kml.archivos:
-            key_s3 = archivo.ruta_descarga.split(prefijo_s3)[-1] if archivo.ruta_descarga.startswith(prefijo_s3) else archivo.ruta_descarga
-            url_firmada = generar_url_firmada(key_s3, expiracion=600)
-
             archivo_data = archivo.serialize()
-            archivo_data['ruta_descarga_s3'] = archivo.ruta_descarga
             archivo_data['ruta_descarga_app'] = f"/api/archivo/{archivo.id_archivo}/descargar"
-            archivo_data['ruta_descarga'] = url_firmada if url_firmada else archivo.ruta_descarga
+            archivo_data['ruta_descarga'] = archivo_data['ruta_descarga_app']
             archivos_data.append(archivo_data)
 
         kml_data['archivos'] = archivos_data

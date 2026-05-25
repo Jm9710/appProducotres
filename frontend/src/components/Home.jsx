@@ -71,6 +71,7 @@ async function downloadBlobFile(url, fileName) {
   const blob = await response.blob();
   console.log("[ZIP_DOWNLOAD]", {
     fileName,
+    status: response.status,
     contentType,
     expectedBytes: contentLength,
     receivedBytes: blob.size,
@@ -187,7 +188,6 @@ const Home = () => {
       }
   
       const data = await response.json();
-      console.log("Datos recibidos:", JSON.stringify(data, null, 2));
   
       setArchivosPorCategoria(data.archivos || {});
   
@@ -195,7 +195,6 @@ const Home = () => {
         setArchivosMostrados(data.archivos[categoria] || []);
       } else {
         const todosArchivos = Object.values(data.archivos).flat();
-        console.log("Todos los archivos:", todosArchivos); // Confirmar contenido
         setArchivosMostrados(todosArchivos);
       }
     } catch (error) {
@@ -407,8 +406,6 @@ if (archivosAsociados.length > 0) {
 
   archivosAsociados.forEach((archivo) => {
     const archivoUrl = getArchivoDownloadUrl(archivo, apiUrl);
-    console.log("URL usada:", archivoUrl);
-  
     const nombreAjustado = getZipDownloadName(archivo);
 
     const listItem = document.createElement("li");

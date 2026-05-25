@@ -1,18 +1,93 @@
 import os
 import boto3
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from app_config import Config
 import mimetypes
 from io import BytesIO
 from urllib.parse import quote
+import re
 
 
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
-    region_name=Config.S3_REGION,
-    endpoint_url=f'https://s3.{Config.S3_REGION}.amazonaws.com'
-)
+SENSITIVE_ERROR_CODES = {
+    'InvalidAccessKeyId': (503, 'Credenciales AWS invalidas o revocadas'),
+    'SignatureDoesNotMatch': (503, 'Firma AWS invalida. Revisar secret key, region y reloj del servidor'),
+    'AccessDenied': (403, 'Acceso denegado al archivo en S3'),
+    'NoSuchKey': (404, 'Archivo no encontrado en S3'),
+    'NoSuchBucket': (404, 'Bucket S3 no encontrado'),
+}
+
+
+class S3ServiceError(Exception):
+    def __init__(self, message, status_code=500, aws_code=None):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.aws_code = aws_code
+
+
+def _create_s3_client():
+    client_kwargs = {
+        'region_name': Config.S3_REGION,
+    }
+
+    if Config.AWS_ACCESS_KEY_ID and Config.AWS_SECRET_ACCESS_KEY:
+        client_kwargs['aws_access_key_id'] = Config.AWS_ACCESS_KEY_ID
+        client_kwargs['aws_secret_access_key'] = Config.AWS_SECRET_ACCESS_KEY
+
+    if Config.S3_REGION:
+        client_kwargs['endpoint_url'] = f'https://s3.{Config.S3_REGION}.amazonaws.com'
+
+    return boto3.client('s3', **client_kwargs)
+
+
+s3 = _create_s3_client()
+
+
+def _log_s3_client_error(action, error, key=None):
+    response = getattr(error, 'response', {}) or {}
+    error_data = response.get('Error', {}) or {}
+    metadata = response.get('ResponseMetadata', {}) or {}
+    aws_code = error_data.get('Code')
+    http_status = metadata.get('HTTPStatusCode')
+
+    print(
+        "[S3_ERROR] "
+        f"action={action} "
+        f"bucket={Config.S3_BUCKET_NAME} "
+        f"key={key or ''} "
+        f"aws_code={aws_code} "
+        f"http_status={http_status} "
+        f"request_id={metadata.get('RequestId', '')}"
+    )
+
+    status_code, message = SENSITIVE_ERROR_CODES.get(
+        aws_code,
+        (500, 'Error al acceder al archivo en S3')
+    )
+    return S3ServiceError(message, status_code=status_code, aws_code=aws_code)
+
+
+def _sanitize_log_value(value):
+    text = str(value)
+    text = re.sub(r'(AWSAccessKeyId=)[^&\s]+', r'\1[REDACTED]', text)
+    text = re.sub(r'(X-Amz-Credential=)[^&\s]+', r'\1[REDACTED]', text)
+    text = re.sub(r'(X-Amz-Signature=)[^&\s]+', r'\1[REDACTED]', text)
+    text = re.sub(r'(Signature=)[^&\s]+', r'\1[REDACTED]', text)
+    text = re.sub(r'AKIA[0-9A-Z]{16}', '[REDACTED_AWS_KEY]', text)
+    text = re.sub(r'ASIA[0-9A-Z]{16}', '[REDACTED_AWS_KEY]', text)
+    return text
+
+
+def _log_s3_unexpected_error(action, error, key=None):
+    print(
+        "[S3_ERROR] "
+        f"action={action} "
+        f"bucket={Config.S3_BUCKET_NAME} "
+        f"key={key or ''} "
+        f"error_type={type(error).__name__} "
+        f"error={_sanitize_log_value(error)}"
+    )
+    return S3ServiceError('Error inesperado al acceder a S3', status_code=500)
 
 def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
     try:
@@ -48,10 +123,10 @@ def subir_archivo_a_s3(archivo, nombre_archivo, carpeta=None, return_url=False):
         return f"Archivo {nombre_archivo} subido exitosamente"
 
     except Exception as e:
-        print(f"Error al subir archivo a S3: {e}")
+        print(f"Error al subir archivo a S3: {type(e).__name__}")
         if return_url:
-            return f"Error al subir archivo a S3: {e}", None
-        return f"Error al subir archivo a S3: {e}"
+            return "Error al subir archivo a S3", None
+        return "Error al subir archivo a S3"
     
 
 def generar_url_firmada(ruta_s3, expiracion=3600):
@@ -62,17 +137,16 @@ def generar_url_firmada(ruta_s3, expiracion=3600):
         if ruta_s3.lower().endswith('.zip'):
             content_type = 'application/zip'
 
-        try:
-            head = s3.head_object(Bucket=Config.S3_BUCKET_NAME, Key=ruta_s3)
-            print(
-                "[S3_SIGN] "
-                f"key={ruta_s3} "
-                f"bytes={head.get('ContentLength')} "
-                f"stored_content_type={head.get('ContentType')} "
-                f"response_content_type={content_type}"
-            )
-        except Exception as head_error:
-            print(f"[S3_SIGN] No se pudo leer metadata de {ruta_s3}: {head_error}")
+        head = s3.head_object(Bucket=Config.S3_BUCKET_NAME, Key=ruta_s3)
+        print(
+            "[S3_SIGN] "
+            f"bucket={Config.S3_BUCKET_NAME} "
+            f"key={ruta_s3} "
+            f"bytes={head.get('ContentLength')} "
+            f"stored_content_type={head.get('ContentType')} "
+            f"response_content_type={content_type} "
+            f"expires_in={expiracion}"
+        )
 
         url = s3.generate_presigned_url(
             ClientMethod='get_object',
@@ -85,11 +159,14 @@ def generar_url_firmada(ruta_s3, expiracion=3600):
             ExpiresIn=expiracion
         )
 
-        print("URL firmada generada:", url)  # Aquí verificas la URL
+        print(f"[S3_SIGN] presigned_url_created key={ruta_s3} expires_in={expiracion}")
 
         return url
+    except ClientError as e:
+        _log_s3_client_error('generate_presigned_url', e, ruta_s3)
+        return None
     except Exception as e:
-        print(f"Error generando URL firmada: {e}")
+        _log_s3_unexpected_error('generate_presigned_url', e, ruta_s3)
         return None
 
 def descargar_archivo_de_s3(ruta_s3):
@@ -122,9 +199,17 @@ def descargar_archivo_de_s3(ruta_s3):
             f"s3_content_type={metadata['s3_content_type']}"
         )
         return buffer, metadata
+    except ClientError as e:
+        raise _log_s3_client_error('get_object', e, ruta_s3)
+    except (NoCredentialsError, PartialCredentialsError) as e:
+        print(
+            "[S3_ERROR] "
+            f"action=get_object bucket={Config.S3_BUCKET_NAME} key={ruta_s3} "
+            f"error_type={type(e).__name__}"
+        )
+        raise S3ServiceError('Credenciales AWS no configuradas correctamente', status_code=503)
     except Exception as e:
-        print(f"Error descargando archivo de S3: {e}")
-        return None, None
+        raise _log_s3_unexpected_error('get_object', e, ruta_s3)
 
 def eliminar_archivo_de_s3(ruta_completa_s3):
     try:
@@ -149,6 +234,4 @@ def eliminar_archivo_de_s3(ruta_completa_s3):
     except Exception as e:
         print(f"Error al eliminar archivo de S3: {e}")
         return False
-
-
 

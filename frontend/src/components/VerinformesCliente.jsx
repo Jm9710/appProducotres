@@ -34,8 +34,6 @@ const VerInformesCliente = ({ onClose }) => {
 
         if (response.ok) {
           const data = await response.json();
-          console.log("Datos obtenidos de la API:", data); // Imprime los datos obtenidos
-
           if (data.archivos && data.archivos.Informes) {
             setInformes(data.archivos.Informes); // Solo los informes
           } else {
