@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useMediaQuery } from "react-responsive";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -35,6 +36,56 @@ function getArchivoName(archivo) {
   return typeof archivo === "string"
     ? archivo
     : archivo?.nombre || archivo?.ruta_descarga || "archivo";
+}
+
+function ModalShell({ title, children, onClose, size = "" }) {
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="modal fade show d-block"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="kml-modal-title"
+      tabIndex="-1"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 2000 }}
+      onMouseDown={onClose}
+    >
+      <div
+        className={`modal-dialog modal-dialog-centered ${size}`.trim()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title" id="kml-modal-title">{title}</h5>
+            <button
+              type="button"
+              className="btn-close"
+              aria-label="Cerrar"
+              onClick={onClose}
+            ></button>
+          </div>
+          <div className="modal-body">{children}</div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 function getArchivoDownloadUrl(archivo, apiUrl) {
@@ -170,6 +221,19 @@ const Home = () => {
       return;
     }
     setShowCargarKmlModal(true);
+  };
+
+  const handleCloseCargarKmlModal = () => {
+    setShowCargarKmlModal(false);
+  };
+
+  const handleKmlUploaded = async () => {
+    setShowCargarKmlModal(false);
+    if (productorSeleccionado) {
+      limpiarKmlsMapa();
+      await cargarKmlsProductor(productorSeleccionado);
+      await fetchArchivos(productorSeleccionado, categoriaSeleccionada);
+    }
   };
 
   const handleShowEliminarModal = () => {
@@ -1384,30 +1448,16 @@ layer.bindPopup(popupContainer);
           </div>
         )}
         {showCargarKmlModal && (
-          <div
-            className="modal show d-block"
-            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-            tabIndex="-1"
+          <ModalShell
+            title="Cargar Archivo KML"
+            onClose={handleCloseCargarKmlModal}
           >
-            <div className="modal-dialog">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Cargar Archivo KML</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowCargarKmlModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <CargarKml
-                    productorId={productorSeleccionado}
-                    onClose={() => setShowCargarKmlModal(false)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+            <CargarKml
+              productorId={productorSeleccionado}
+              onClose={handleCloseCargarKmlModal}
+              onUploaded={handleKmlUploaded}
+            />
+          </ModalShell>
         )}
 
         {showInformesModal && (
@@ -1686,30 +1736,16 @@ layer.bindPopup(popupContainer);
         </div>
       )}
       {showCargarKmlModal && (
-        <div
-          className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-          tabIndex="-1"
+        <ModalShell
+          title="Cargar Archivo KML"
+          onClose={handleCloseCargarKmlModal}
         >
-          <div className="modal-dialog modal">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Cargar Archivo KML</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowCargarKmlModal(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <CargarKml
-                  productorId={productorSeleccionado}
-                  onClose={() => setShowCargarKmlModal(false)}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+          <CargarKml
+            productorId={productorSeleccionado}
+            onClose={handleCloseCargarKmlModal}
+            onUploaded={handleKmlUploaded}
+          />
+        </ModalShell>
       )}
 
       {showInformesModal && (
